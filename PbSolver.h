@@ -32,6 +32,10 @@ using Minisat::SimpSolver;
 using Minisat::lbool;
 using Minisat::mkLit;
 using Minisat::lit_Undef;
+using Minisat::l_Undef;
+using Minisat::l_True;
+using Minisat::l_False;
+using Minisat::var_Undef;
 
 //=================================================================================================
 // Linear -- a class for storing pseudo-boolean constraints:

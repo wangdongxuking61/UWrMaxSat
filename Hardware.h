@@ -27,7 +27,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 
 int  estimatedAdderCost(const Linear& c);
-void oddEvenSort(vec<Formula>& fs);
+void oddEvenSort(vec<Formula>& fs, int max_sel, int ineq);
 void rippleAdder(const vec<Formula>& xs, const vec<Formula>& ys, vec<Formula>& out);
 void addPb(const vec<Formula>& ps, const vec<Int>& Cs_, vec<Formula>& out, int bits);
 

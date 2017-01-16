@@ -147,29 +147,29 @@ void optimizeBase(vec<Int>& seq, vec<Int>& rhs, int& cost_bestfound, vec<int>& b
 
 
 static
-void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter)
+void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq)
 {
     out_sorter.clear();
     for (int i = 0; i < ps.size(); i++)
         for (int j = 0; j < Cs[i]; j++)
             out_sorter.push(ps[i]);
-    oddEvenSort(out_sorter); // (overwrites inputs)
+    oddEvenSort(out_sorter, max_sel, ineq); // (overwrites inputs)
 }
 
 static
-void buildSorter(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& out_sorter)
+void buildSorter(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq)
 {
     vec<int>    Cs_copy;
     for (int i = 0; i < Cs.size(); i++)
         Cs_copy.push(toint(Cs[i]));
-    buildSorter(ps, Cs_copy, out_sorter);
+    buildSorter(ps, Cs_copy, out_sorter, max_sel, ineq);
 }
 
 
 class Exception_TooBig {};
 
 static
-void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<int>& base, int digit_no, vec<vec<Formula> >& out_digits, int max_cost)
+void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<int>& base, int digit_no, vec<vec<Formula> >& out_digits, int max_cost, int max_sel, int ineq)
 {
     assert(ps.size() == Cs.size());
 
@@ -188,7 +188,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
             ps.push(carry[i]),
             Cs.push(1);
         out_digits.push();
-        buildSorter(ps, Cs, out_digits.last());
+        buildSorter(ps, Cs, out_digits.last(),max_sel, ineq);
 
     }else{
         vec<Formula>    ps_rem;
@@ -218,7 +218,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
 
         // Build sorting network:
         vec<Formula> result;
-        buildSorter(ps_rem, Cs_rem, result);
+        buildSorter(ps_rem, Cs_rem, result,-1, ineq);
 
         // Get carry bits:
         carry.clear();
@@ -236,7 +236,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
             out_digits.last().push(out);
         }
 
-        buildConstraint(ps_div, Cs_div, carry, base, digit_no+1, out_digits, max_cost); // <<== change to normal loop
+        buildConstraint(ps_div, Cs_div, carry, base, digit_no+1, out_digits, max_cost, max_sel, ineq); // <<== change to normal loop
     }
 }
 
@@ -276,7 +276,7 @@ Formula lexComp(int sz, vec<int>& num, vec<vec<Formula> >& digits)
         vec<Formula>& digit = digits[sz];
         int           dig   = num[sz];
 
-        Formula gt = (digit.size() > dig) ? digit[dig] : _0_;       // This digit is greater than the "dig" of 'num'.
+        Formula gt = (digit.size() > dig && sz > 0) ? digit[dig] : _0_;       // This digit is greater than the "dig" of 'num'.
         Formula ge = (dig == 0) ? _1_ :
                      (digit.size() > dig-1) ? digit[dig-1] : _0_;   // This digit is greater than or equal to the "dig" of 'num'.
 
@@ -293,18 +293,34 @@ Formula lexComp(vec<int>& num, vec<vec<Formula> >& digits) {
 static
 Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, Int hi, int max_cost)
 {
-    vec<Formula> carry;
-    vec<vec<Formula> > digits;
-    buildConstraint(ps, Cs, carry, base, 0, digits, max_cost);
-    if (FEnv::topSize() > max_cost) throw Exception_TooBig();
-
+    if (base.size() == 0) {
+        Int sum = 0, oldlo = lo;
+        for (int i = 0; i < Cs.size(); i++) sum += Cs[i];
+        if (hi != Int_MAX && hi > sum/2 && (lo == Int_MIN || sum - lo < hi) || 
+            lo != Int_MIN && lo > sum/2) {
+            lo = (hi == Int_MAX ? Int_MIN : sum - hi);
+            hi = (oldlo == Int_MIN ? Int_MAX : sum-oldlo);
+            for (int i = 0; i < ps.size(); i++) ps[i] = neg(ps[i]);
+        }  
+    }
     vec<int> lo_digs;
     vec<int> hi_digs;
-    if (lo != Int_MIN)
+    int max_sel = 0, ineq = 0;
+    if (lo != Int_MIN) {
         convert(lo, base, lo_digs);
-    if (hi != Int_MAX)
+        max_sel = lo_digs[base.size()];
+        ineq = 1;
+    }
+    if (hi != Int_MAX) {
         convert(hi+1, base, hi_digs);   // (+1 because we will change '<= x' to '!(... >= x+1)'
-
+        if (max_sel < hi_digs[base.size()]) max_sel = hi_digs[base.size()];
+        ineq = (ineq == 1 ? 0 : -1);
+    }
+    if (base.size() > 0) max_sel++;
+    vec<Formula> carry;
+    vec<vec<Formula> > digits;
+    buildConstraint(ps, Cs, carry, base, 0, digits, max_cost, max_sel, ineq);
+    if (FEnv::topSize() > max_cost) throw Exception_TooBig();
 
     /*DEBUG
     pf("Networks:");

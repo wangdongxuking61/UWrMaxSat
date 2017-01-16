@@ -603,11 +603,11 @@ void PbSolver::printStats()
 {
     double cpu_time = Minisat::cpuTime();
     double mem_used = Minisat::memUsedPeak();
-    printf("restarts              : %"PRIu64"\n", sat_solver.starts);
-    printf("conflicts             : %-12"PRIu64"   (%.0f /sec)\n", sat_solver.conflicts   , sat_solver.conflicts   /cpu_time);
-    printf("decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", sat_solver.decisions, (float)sat_solver.rnd_decisions*100 / (float)sat_solver.decisions, sat_solver.decisions   /cpu_time);
-    printf("propagations          : %-12"PRIu64"   (%.0f /sec)\n", sat_solver.propagations, sat_solver.propagations/cpu_time);
-    printf("conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
+    printf("restarts              : %" PRIu64"\n", sat_solver.starts);
+    printf("conflicts             : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.conflicts   , sat_solver.conflicts   /cpu_time);
+    printf("decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", sat_solver.decisions, (float)sat_solver.rnd_decisions*100 / (float)sat_solver.decisions, sat_solver.decisions   /cpu_time);
+    printf("propagations          : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.propagations, sat_solver.propagations/cpu_time);
+    printf("conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("CPU time              : %g s\n", cpu_time);
 }

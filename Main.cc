@@ -52,6 +52,7 @@ Command  opt_command       = cmd_Minimize;
 bool     opt_branch_pbvars = false;
 int      opt_polarity_sug  = 1;
 bool     opt_old_format    = false;
+int      opt_sort_alg      = 1;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -164,6 +165,9 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "v0"        )) opt_verbosity = 0;
             else if (oneof(arg, "v1"        )) opt_verbosity = 1;
             else if (oneof(arg, "v2"        )) opt_verbosity = 2;
+            else if (oneof(arg, "s1"        )) opt_sort_alg  = 1;
+            else if (oneof(arg, "s2"        )) opt_sort_alg  = 2;
+            else if (oneof(arg, "s4"        )) opt_sort_alg  = 4;
 
             else
                 fprintf(stderr, "ERROR! Invalid command line option: %s\n", argv[i]), exit(1);
