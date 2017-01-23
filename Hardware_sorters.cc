@@ -167,10 +167,10 @@ static inline unsigned pow2roundup (unsigned x) {
     return x+1;
 }
 
-static inline bool preferDirectMerge(unsigned n, unsigned k) {
-    static unsigned minTest = 157, maxTest = 272;
+static inline bool preferirectMerge(unsigned n, unsigned k) {
+    static unsigned minTest = 94, maxTest = 201;
     static unsigned short nBound[] = {
-#include "DirOr2wiseMerge.inl"
+#include "DirOrOddEvenMerge.inl"
   } ;
   if (k < minTest) return true;
   if (k > maxTest) return false;
@@ -180,8 +180,8 @@ static inline bool preferDirectMerge(unsigned n, unsigned k) {
 static inline void sort2(vec<Formula>& vars, unsigned i, unsigned j) // comparator
 {
     Formula a = vars[i], b = vars[j];
-    vars[i] = a || b;
-    vars[j] = a && b;
+    vars[i] = a | b;
+    vars[j] = a & b;
 }
 
 static void DirectCardClausesLT(const vec<Formula>& invars, unsigned start, unsigned pos, unsigned j, vec<Formula>& args) {
@@ -305,14 +305,17 @@ static void OddEvenSelect(const vec<Formula>& invars, vec<Formula>& outvars, uns
 
   assert(k <= n);
 
-  if (n == 0) return;
+  if (n == 0 || k == 0) return;
   if (n == 1) {
     outvars.push(invars[0]);
     return;
   }
-  if (ineq != 0 && (k<=1 || k==2 && n <= 39 || k==3 && n <= 10 || k==4 && n <= 8 || n<=6)) {
-      if (ineq < 0) DirectSortLT(invars, outvars, k); 
-      else          DirectSortGT(invars, outvars, k);
+  if (ineq < 0 && (k==1 || k==2 && n <= 39 || k==3 && n <= 10 || k==4 && n <= 8 || n<=6)) {
+       DirectSortLT(invars, outvars, k);
+       return;
+  }
+  if (ineq > 0 && (k==1 || k==2 && n <= 11 || k==3 && n <= 9 || k==4 && n <= 7 || n<=6)) {
+      DirectSortGT(invars, outvars, k);
       return;
   }
 
@@ -409,15 +412,17 @@ static void OddEven4Select(const vec<Formula>& invars, vec<Formula>& outvars,
 
   assert(k <= n);
 
-  if (n==0) return;
+  if (n==0 || k == 0) return;
   if (n == 1) {
     outvars.push(invars[0]);
     return;
   }
  
-  if (ineq != 0 && (k <= 1 || k == 2 && n <= 9 || n <= 6)) {
-      if (ineq < 0) DirectSortLT(invars, outvars, k); 
-      else          DirectSortGT(invars, outvars, k);
+  if (ineq < 0 && (k == 1 || k == 2 && n <= 8 || n <= 6)) {
+      DirectSortLT(invars, outvars, k);
+      return;
+  } else if (ineq > 0 && (k == 1 || k == 2 && n <= 7 || n <= 5)) {
+      DirectSortGT(invars, outvars, k);
       return;
   }
   
@@ -517,8 +522,9 @@ static void OddEven4Merge(vec<Formula> const& a, vec<Formula> const& b, vec<Form
         invars.push(a[0]); invars.push(b[0]);
         if (nc > 0) invars.push(c[0]);
         if (nd > 0) invars.push(d[0]);
-        if (ineq < 0) DirectSortLT(invars, outvars, k); 
-        else          DirectSortGT(invars, outvars, k);
+        if (ineq < 0)      DirectSortLT(invars, outvars, k); 
+        else if (ineq > 0) DirectSortGT(invars, outvars, k);
+        else               OddEvenSelect(invars, outvars, k, ineq);
         return;
     }
     // from now on: na > 1 && nb > 0 

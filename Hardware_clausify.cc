@@ -114,7 +114,7 @@ Lit Clausifier::polarityClausify(Formula f)
     }else{
 #if 1
         result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
-            mkLit(var(vmapp.at(~f))) : result; // mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
+            mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
 #else
         result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
 #endif
@@ -126,17 +126,12 @@ Lit Clausifier::polarityClausify(Formula f)
                 if (!sign(f)){
                     Minisat::vec<Lit> ls;
                     for (int i = 0; i < conj.size(); i++)
-                        ls.push(polarityClausify(conj[i]));
-                    if (result == lit_Undef) result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
-                    for (int i = 0; i < conj.size(); i++)
-                        clause(~result,ls[i]); //polarityClausify(conj[i]));
+                        clause(~result,polarityClausify(conj[i]));
                 }else{
                     Minisat::vec<Lit> ls;
-                    //ls.push(result);
+                    ls.push(result);
                     for (int i = 0; i < conj.size(); i++)
                         ls.push(polarityClausify(~conj[i]));
-                    if (result == lit_Undef) result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
-                    ls.push(result);
                     s.addClause(ls);
                 }
                 //printf("and: %d = ", var(result));
@@ -145,7 +140,6 @@ Lit Clausifier::polarityClausify(Formula f)
                 //           var(polarityClausify(conj[i])));
                 //printf("\n");
             }else{
-                if (result == lit_Undef) result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
                 Lit l  = polarityClausify( left (f));
                 Lit r  = polarityClausify( right(f));
                 Lit nl = polarityClausify(~left (f));
@@ -162,7 +156,6 @@ Lit Clausifier::polarityClausify(Formula f)
                 }
             }
         }else if (ITE_p(f)){
-            if (result == lit_Undef) result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
             Lit  c = polarityClausify( cond(f));
             Lit nc = polarityClausify(~cond(f));
 
@@ -181,7 +174,6 @@ Lit Clausifier::polarityClausify(Formula f)
             }
         }else{
             assert(FA_p(f));
-            if (result == lit_Undef) result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
             if (isCarry(f)){
                 //printf("carry:\n");
                 if (!sign(f)){

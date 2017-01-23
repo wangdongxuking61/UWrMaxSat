@@ -341,7 +341,7 @@ Num:    2    0     5     6
 */
 
     Formula ret = ((lo == Int_MIN) ? _1_ :  lexComp(lo_digs, digits))
-                & ((hi == Int_MAX) ? _1_ : ~lexComp(hi_digs, digits));
+                & ((hi == Int_MAX) ? _1_ : ~lexComp(hi_digs, digits)); 
     if (FEnv::topSize() > max_cost) throw Exception_TooBig();
     return ret;
 }
