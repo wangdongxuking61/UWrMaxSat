@@ -167,7 +167,7 @@ static inline unsigned pow2roundup (unsigned x) {
     return x+1;
 }
 
-static inline bool preferirectMerge(unsigned n, unsigned k) {
+static inline bool preferDirectMerge(unsigned n, unsigned k) {
     static unsigned minTest = 94, maxTest = 201;
     static unsigned short nBound[] = {
 #include "DirOrOddEvenMerge.inl"
