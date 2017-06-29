@@ -114,7 +114,7 @@ Lit Clausifier::polarityClausify(Formula f)
     }else{
 #if 1
         result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
-            mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
+            mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(true /*l_Undef*/, !opt_branch_pbvars));
 #else
         result = mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
 #endif
@@ -124,9 +124,18 @@ Lit Clausifier::polarityClausify(Formula f)
                 collect(f, conj);
                 assert(conj.size() > 1);
                 if (!sign(f)){
-                    Minisat::vec<Lit> ls;
                     for (int i = 0; i < conj.size(); i++)
-                        clause(~result,polarityClausify(conj[i]));
+                        if (Bin_p(conj[i]) && op(conj[i]) == op_And && sign(conj[i]) && occ.at(conj[i]) == 1 &&
+                                vmapp.at(conj[i]) == lit_Undef && vmapp.at(~conj[i]) == lit_Undef) {
+                            vec<Formula> disj;
+                            collect(conj[i], disj);
+                            Minisat::vec<Lit> ls;
+                            ls.push(~result);
+                            for (int j = 0; j < disj.size(); j++)
+                                ls.push(polarityClausify(~disj[j]));
+                            s.addClause(ls);
+                        } else 
+                            clause(~result,polarityClausify(conj[i]));
                 }else{
                     Minisat::vec<Lit> ls;
                     ls.push(result);
@@ -232,7 +241,7 @@ Lit Clausifier::basicClausify(Formula f)
     }else if (vmap.at(f) != var_Undef && !s.isEliminated(vmap.at(f))){
         result = vmap.at(f);
     }else{
-        result = s.newVar(l_Undef, !opt_branch_pbvars);
+        result = s.newVar(true /*l_Undef*/, !opt_branch_pbvars);
         Lit p  = mkLit(result);
         if (Bin_p(f)){
 

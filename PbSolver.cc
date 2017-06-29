@@ -17,6 +17,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
+#include <unistd.h>
+#include <signal.h>
 #include "minisat/utils/System.h"
 #include "Sort.h"
 #include "Debug.h"
@@ -481,7 +483,9 @@ bool PbSolver::rewriteAlmostClauses()
 
 //=================================================================================================
 // Main solver/optimizer:
-
+static PbSolver *pb_solver;
+static
+void SIGINT_interrupt(int /*signum*/) { pb_solver->sat_solver.interrupt(); pb_solver->asynch_interrupt=true; }
 
 static
 Int evalGoal(Linear& goal, Minisat::vec<lbool>& model)
@@ -500,14 +504,20 @@ Int evalGoal(Linear& goal, Minisat::vec<lbool>& model)
 
 void PbSolver::solve(solve_Command cmd)
 {
-    if (!okay()) return;
+    if (!okay()) {
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        return;
+    }
 
     // Convert constraints:
     pb_n_vars = nVars();
     pb_n_constrs = constrs.size();
     if (opt_verbosity >= 1) reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
     propagate();
-    if (!convertPbs(true)){ assert(!okay()); return; }
+    if (!convertPbs(true)){
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        assert(!okay()); return; 
+    }
 
     // Freeze goal function variables (for SatELite):
     if (goal != NULL){
@@ -526,7 +536,7 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_polarity_sug != 0){
         for (int i = 0; i < goal_Cs.size(); i++){
             bool dir = goal_Cs[i]*opt_polarity_sug > 0 ? !sign(goal_ps[i]) : sign(goal_ps[i]);
-            sat_solver.setPolarity(var(goal_ps[i]), lbool(dir));
+            sat_solver.setPolarity(var(goal_ps[i]), /*lbool*/(dir));
         }
     }
 
@@ -542,10 +552,16 @@ void PbSolver::solve(solve_Command cmd)
         reportf("Exporting CNF to: \b%s\b\n", opt_cnf),
         sat_solver.toDimacs(opt_cnf),
         exit(0);
+    if (opt_verbosity >= 1)
+        sat_solver.printVarsCls();
+    pb_solver = this;
+    signal(SIGINT, SIGINT_interrupt);
+    signal(SIGXCPU,SIGINT_interrupt);
 
     bool    sat = false;
     int     n_solutions = 0;    // (only for AllSolutions mode)
     while (sat_solver.solve()){
+        if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
         sat = true;
         if (cmd == sc_AllSolutions){
             Minisat::vec<Lit>    ban;
@@ -591,7 +607,11 @@ void PbSolver::solve(solve_Command cmd)
             char* tmp = toString(best_goalvalue);
             reportf("\bFirst solution found: %s\b\n", tmp);
             xfree(tmp);
-        }else{
+        }else if (asynch_interrupt){
+            char* tmp = toString(best_goalvalue);
+            reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
+            xfree(tmp);
+       }else{
             char* tmp = toString(best_goalvalue);
             reportf("\bOptimal solution: %s\b\n", tmp);
             xfree(tmp);
@@ -603,11 +623,11 @@ void PbSolver::printStats()
 {
     double cpu_time = Minisat::cpuTime();
     double mem_used = Minisat::memUsedPeak();
-    printf("restarts              : %" PRIu64"\n", sat_solver.starts);
-    printf("conflicts             : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.conflicts   , sat_solver.conflicts   /cpu_time);
-    printf("decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", sat_solver.decisions, (float)sat_solver.rnd_decisions*100 / (float)sat_solver.decisions, sat_solver.decisions   /cpu_time);
-    printf("propagations          : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.propagations, sat_solver.propagations/cpu_time);
-    printf("conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
-    if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
-    printf("CPU time              : %g s\n", cpu_time);
+    printf("c restarts              : %" PRIu64"\n", sat_solver.starts);
+    printf("c conflicts             : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.conflicts   , sat_solver.conflicts   /cpu_time);
+    printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", sat_solver.decisions, (float)sat_solver.rnd_decisions*100 / (float)sat_solver.decisions, sat_solver.decisions   /cpu_time);
+    printf("c propagations          : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.propagations, sat_solver.propagations/cpu_time);
+    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
+    if (mem_used != 0) printf("c Memory used           : %.2f MB\n", mem_used);
+    printf("c CPU time              : %g s\n", cpu_time);
 }

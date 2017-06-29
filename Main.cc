@@ -26,6 +26,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 
 #include <unistd.h>
 #include <signal.h>
+#include "minisat/utils/System.h"
 #include "PbSolver.h"
 #include "PbParser.h"
 
@@ -53,6 +54,8 @@ bool     opt_branch_pbvars = false;
 int      opt_polarity_sug  = 1;
 bool     opt_old_format    = false;
 int      opt_sort_alg      = 1;
+int      opt_cpu_lim       = INT32_MAX;
+int      opt_mem_lim       = INT32_MAX;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -167,8 +170,10 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "v2"        )) opt_verbosity = 2;
             else if (oneof(arg, "s1"        )) opt_sort_alg  = 1;
             else if (oneof(arg, "s2"        )) opt_sort_alg  = 2;
+            else if (oneof(arg, "s3"        )) opt_sort_alg  = 3;
             else if (oneof(arg, "s4"        )) opt_sort_alg  = 4;
-
+            else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
+            else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
             else
                 fprintf(stderr, "ERROR! Invalid command line option: %s\n", argv[i]), exit(1);
 
@@ -251,14 +256,21 @@ static void SIGINT_handler(int /*signum*/) {
     reportf("\n");
     reportf("*** INTERRUPTED ***\n");
     //SatELite::deleteTmpFiles();
+    fflush(stdout);
     _exit(0); }     // (using 'exit()' rather than '_exit()' sometimes causes the solver to hang (why?))
 
 
 static void SIGTERM_handler(int /*signum*/) {
     reportf("\n");
     reportf("*** TERMINATED ***\n");
+    if (opt_verbosity >= 1) {
+        reportf("_______________________________________________________________________________\n\n");
+        pb_solver->printStats();
+        reportf("_______________________________________________________________________________\n");
+    }
     outputResult(*pb_solver, false);
     //SatELite::deleteTmpFiles();
+    fflush(stdout);
     _exit(0);
 }
 
@@ -280,7 +292,7 @@ PbSolver::solve_Command convert(Command cmd) {
 int main(int argc, char** argv)
 {
     /*DEBUG*/if (argc > 1 && (strcmp(argv[1], "-debug") == 0 || strcmp(argv[1], "--debug") == 0)){ void test(); test(); exit(0); }
-
+  try {
     parseOptions(argc, argv);
     pb_solver = new PbSolver(opt_preprocess);
     signal(SIGINT , SIGINT_handler);
@@ -292,6 +304,17 @@ int main(int argc, char** argv)
         reportf("Setting switch '-first' from environment variable 'PBSATISFIABILITYONLY'.\n"),
         opt_command = cmd_FirstSolution;
 
+    if (opt_cpu_lim != INT32_MAX) {
+        reportf("Setting cpu limit to %ds.\n",opt_cpu_lim);
+        signal(SIGXCPU, SIGTERM_handler); 
+        Minisat::limitTime(opt_cpu_lim);
+    }
+    if (opt_mem_lim != INT32_MAX) {
+        reportf("Setting memory limit to %dMB.\n",opt_mem_lim);
+        signal(SIGSEGV, SIGTERM_handler); 
+        signal(ENOMEM, SIGTERM_handler); 
+        Minisat::limitMemory(opt_mem_lim);
+    }
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     parse_PB_file(opt_input, *pb_solver, opt_old_format);
     pb_solver->solve(convert(opt_command));
@@ -303,18 +326,30 @@ int main(int argc, char** argv)
 
     // <<== write result to file 'opt_result'
 
-    if (opt_command == cmd_Minimize)
-        outputResult(*pb_solver);
-    else if (opt_command == cmd_FirstSolution)
-        outputResult(*pb_solver, false);
-
     if (opt_verbosity >= 1) {
         reportf("_______________________________________________________________________________\n\n");
         pb_solver->printStats();
         reportf("_______________________________________________________________________________\n");
     }
 
+    if (opt_command == cmd_Minimize)
+        outputResult(*pb_solver, !pb_solver->asynch_interrupt);
+    else if (opt_command == cmd_FirstSolution)
+        outputResult(*pb_solver, false);
+
     exit(0); // (faster than "return", which will invoke the destructor for 'PbSolver')
+    
+  } catch (Minisat::OutOfMemoryException&){
+        if (opt_verbosity >= 1) {
+          reportf("_______________________________________________________________________________\n\n");
+          pb_solver->printStats();
+          reportf("_______________________________________________________________________________\n");
+          reportf("Out of memory exception caught\n");
+        }
+        outputResult(*pb_solver, false);
+        exit(0);
+  }
+
 }
 
 

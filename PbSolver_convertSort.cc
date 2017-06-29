@@ -115,6 +115,9 @@ void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int
             /* <<==
             om 'rhs' slutar på 0:a och 'rest' inte kan overflowa, då behövs inte det sorterande nätverket för 'rest' ("always TRUE")
             samma sak om 'rhs' sista siffra är strikt större än 'rest' ("never TRUE")
+            
+            If 'rhs' ends at 0 and 'residues' can not be overloaded, then the "Rest" ("always TRUE") sorting network is not required.
+             The same thing about 'rh's last digit is strictly larger than' rest '(' never TRUE ')
             */
         }
         /**/pf("\n\n");

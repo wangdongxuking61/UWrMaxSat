@@ -104,6 +104,7 @@ static void skipComments(B& in) {      // skip comment and empty lines (assuming
 
 template<class B>
 static bool skipEndOfLine(B& in) {     // skip newline AND trailing comment/empty lines
+    skipWhitespace(in);
     if (*in == '\n') ++in;
     else             return false;
     skipComments(in);

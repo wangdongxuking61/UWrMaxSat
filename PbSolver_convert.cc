@@ -76,6 +76,6 @@ bool PbSolver::convertPbs(bool first_call)
     mem.clear();
 
     clausify(sat_solver, converted_constrs);
-
+    
     return okay();
 }

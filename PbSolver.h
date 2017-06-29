@@ -74,8 +74,9 @@ public:
 
 
 class PbSolver {
-protected:
+public:
     SimpSolver          sat_solver;     // Underlying SAT solver.
+protected:
     vec<Lit>            trail;          // Chronological assignment stack.
 
     StackAlloc<char*>   mem;            // Used to allocate the 'Linear' constraints stored in 'constrs' (other 'Linear's, such as the goal function, are allocated with 'xmalloc()')
@@ -116,6 +117,7 @@ public:
                 , declared_n_vars(-1)
                 , declared_n_constrs(-1)
                 , best_goalvalue(Int_MAX)
+                , asynch_interrupt(false)
                 {
                     // Turn off preprocessing if wanted.
                     if (!use_preprocessing) 
@@ -127,6 +129,7 @@ public:
     lbool   value(Var x) const { return sat_solver.value(x); }
     lbool   value(Lit p) const { return sat_solver.value(p); }
     int     nVars()      const { return sat_solver.nVars(); }
+    int     nClauses()   const { return sat_solver.nClauses(); }
     int     nConstrs()   const { return constrs.size(); }
 
     // Public variables:
@@ -142,6 +145,7 @@ public:
     vec<cchar*>         index2name;
     vec<bool>           best_model;     // Best model found (size is 'pb_n_vars').
     Int                 best_goalvalue; // Value of goal function for that model (or 'Int_MAX' if no models were found).
+    bool                asynch_interrupt;
 
     // Problem specification:
     //
