@@ -20,6 +20,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "PbSolver.h"
 #include "Hardware.h"
 #include "Debug.h"
+#include "HashQueue.h"
 
 //#define pf(format, args...) (reportf(format, ## args), fflush(stdout))
 #define pf(format, args...) nothing()
@@ -38,18 +39,13 @@ int primes[] = { 2, 3, 5, 7, 11, 13, 17 };
 //int primes[] = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
 //int primes[] = { 2, 3, 4, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709, 719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787, 797, 809, 811, 821, 823, 827, 829, 839, 853, 857, 859, 863, 877, 881, 883, 887, 907, 911, 919, 929, 937, 941, 947, 953, 967, 971, 977, 983, 991, 997 };
 
-
-static
-void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int>& base, int& cost_bestfound, vec<int>& base_bestfound)
+static inline int finalCost(vec<Int>& seq, int cost)
 {
-    if (cost >= cost_bestfound)
-        return;
-
     // "Base case" -- don't split further, build sorting network for current sequence:
-    int final_cost = 0;
+    int final_cost = cost;
     for (int i = 0; i < seq.size(); i++){
         if (seq[i] > INT_MAX)
-            goto TooBig;
+            return INT_MAX;
       #ifdef ExpensiveBigConstants
         final_cost += toint(seq[i]);
       #else
@@ -57,14 +53,15 @@ void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int
         final_cost += c;
       #endif
         if (final_cost < 0)
-            goto TooBig;
+            return INT_MAX;
     }
-    if (cost + final_cost < cost_bestfound){
-        base.copyTo(base_bestfound);
-        cost_bestfound = cost + final_cost;
-    }
-  TooBig:;
+    return final_cost;
+}
 
+static
+void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int>& base, int& cost_bestfound, vec<int>& base_bestfound,
+    HashQueue *Q)
+{
     /**/static int depth = 0;
 
     // <<== could count 1:s here for efficiency
@@ -85,13 +82,13 @@ void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int
         int rest = carry_ins;   // Sum of all the remainders.
         Int div, rem;
 
-        /**/for (int n = depth; n != 0; n--) pf("  "); pf("prime=%d   carry_ins=%d\n", p, carry_ins);
+        /**/for (int n = depth; n != 0; n--) pf("  "); pf("prime=%d   carry_ins=%d  cost_bestfound=%d\n", p, carry_ins, cost_bestfound);
         /**/for (int n = depth; n != 0; n--) pf("  "); pf("New seq:");
         for (int j = 0; j < seq.size(); j++){
             rest += toint(seq[j] % Int(p));
             div = seq[j] / Int(p);
             if (div > 0)
-                //**/pf(" %d", div),
+                /**/pf(" %d", div),
                 new_seq.push(div);
         }
         /**/pf("\n");
@@ -116,31 +113,56 @@ void optimizeBase(vec<Int>& seq, int carry_ins, vec<Int>& rhs, int cost, vec<int
             om 'rhs' slutar på 0:a och 'rest' inte kan overflowa, då behövs inte det sorterande nätverket för 'rest' ("always TRUE")
             samma sak om 'rhs' sista siffra är strikt större än 'rest' ("never TRUE")
             
-            If 'rhs' ends at 0 and 'residues' can not be overloaded, then the "Rest" ("always TRUE") sorting network is not required.
-             The same thing about 'rh's last digit is strictly larger than' rest '(' never TRUE ')
+            If 'rhs' ends at 0 and 'residues' can not be overflowed, then the "Rest" sorting network is not required ("always TRUE").
+            The same thing about 'rh's last digit is strictly larger than' rest '(' never TRUE ')
             */
         }
         /**/pf("\n\n");
 
-        base.push(p);
-        /**/depth++;
-        optimizeBase(new_seq, rest/p, new_rhs, cost+(digit_important ? rest : 0), base, cost_bestfound, base_bestfound);
-        /**/depth--;
-        base.pop();
-
+        int new_cost = cost+(digit_important ? rest : 0), new_carry_ins = rest/p;
+        if (new_cost < cost_bestfound && new_cost + new_seq.size() <= cost_bestfound) {
+            base.push(p);
+            /**/depth++;
+            int final_cost = finalCost(new_seq, new_cost);
+            if (final_cost < cost_bestfound){
+                base.copyTo(base_bestfound);
+                cost_bestfound = final_cost;
+            }
+            if (Q == NULL || new_seq.size() > HashQueue::maxBaseSize)
+                optimizeBase(new_seq, new_carry_ins, new_rhs, new_cost, base, cost_bestfound, base_bestfound, Q);
+            else Q->push(base, new_cost, new_carry_ins);
+            /**/depth--;
+            base.pop();
+        }
+        if (Q == NULL) return;
         new_seq.clear();
         new_rhs.clear();
     }
 }
 
-
 static
 void optimizeBase(vec<Int>& seq, vec<Int>& rhs, int& cost_bestfound, vec<int>& base_bestfound)
 {
+    HashQueue Q;
+    vec<Int>    new_seq;
     vec<int>    base;
-    cost_bestfound = INT_MAX;
+    cost_bestfound = finalCost(seq,0);
     base_bestfound.clear();
-    optimizeBase(seq, 0, rhs, 0, base, cost_bestfound, base_bestfound);
+    optimizeBase(seq, 0, rhs, 0, base, cost_bestfound, base_bestfound, NULL);
+    base.clear(); Q.push(base,0,0);
+    while (!Q.isEmpty()) {
+        int carry_ins, cost = Q.popMin(base,carry_ins);
+        if (cost >= cost_bestfound) break;
+        new_seq.clear();
+        Int prod = 1;
+        for (int i=base.size()-1; i >= 0; i--) prod *= base[i];
+        for (int i=0; i < seq.size(); i++) {
+            Int div = seq[i] / prod;
+            if (div > 0) new_seq.push(div);
+        }
+        optimizeBase(new_seq, carry_ins, rhs, cost, base, cost_bestfound, base_bestfound, &Q);        
+    }
+    Q.clear();
 }
 
 
@@ -294,18 +316,8 @@ Formula lexComp(vec<int>& num, vec<vec<Formula> >& digits) {
 
 
 static
-Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, Int hi, int max_cost)
+Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, Int hi, int max_cost,  bool lastOK)
 {
-    if (base.size() == 0) {
-        Int sum = 0, oldlo = lo;
-        for (int i = 0; i < Cs.size(); i++) sum += Cs[i];
-        if (hi != Int_MAX && hi > sum/2 && (lo == Int_MIN || sum - lo < hi) || 
-            lo != Int_MIN && lo > sum/2) {
-            lo = (hi == Int_MAX ? Int_MIN : sum - hi);
-            hi = (oldlo == Int_MIN ? Int_MAX : sum-oldlo);
-            for (int i = 0; i < ps.size(); i++) ps[i] = neg(ps[i]);
-        }  
-    }
     vec<int> lo_digs;
     vec<int> hi_digs;
     int max_sel = 0, ineq = 0;
@@ -321,8 +333,12 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
     }
     if (base.size() > 0) max_sel++;
     vec<Formula> carry;
-    vec<vec<Formula> > digits;
-    buildConstraint(ps, Cs, carry, base, 0, digits, max_cost, max_sel, ineq);
+    static vec<vec<Formula> > digits;
+    if (!lastOK) {
+        for (int i=0; i < digits.size(); i++) digits[i].clear();
+        digits.clear();
+        buildConstraint(ps, Cs, carry, base, 0, digits, max_cost, max_sel, ineq);
+    }
     if (FEnv::topSize() > max_cost) throw Exception_TooBig();
 
     /*DEBUG
@@ -371,24 +387,56 @@ a4
 //
 Formula buildConstraint(const Linear& c, int max_cost)
 {
-    vec<Formula>    ps;
-    vec<Int>        Cs;
+    static vec<Formula>    ps;
+    static vec<Int>        Cs;
+    static Int lo = Int_MIN, hi = Int_MAX;
+    static int lastCost = 0;
+    static Formula lastRet = _undef_;
+    
+    bool lastOK, negate;    
+    Int sum = 0, oldlo = lo, oldhi = hi;
 
-    for (int j = 0; j < c.size; j++)
-        ps.push(lit2fml(c[j])),
-        Cs.push(c(j));
+    for (int i = 0; i < c.size; i++) sum += c(i);
+    negate = c.hi != Int_MAX && c.hi > sum/2 && (c.lo == Int_MIN || sum - c.lo < c.hi) || 
+             c.lo != Int_MIN && c.lo > sum/2;    
+    if (negate)
+        lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi,
+	hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
+    else lo = c.lo, hi = c.hi;
+    
+    lastOK = ps.size() == c.size && (oldhi != Int_MAX && hi <= oldhi ||
+				     oldhi == Int_MAX && lo <= oldlo);
+    if (!lastOK) {
+        ps.clear(), Cs.clear();
+        for (int j = 0; j < c.size; j++)
+	    ps.push(negate ? neg(lit2fml(c[j])) : lit2fml(c[j])),
+            Cs.push(c(j));
+    } else
+        for (int j = 0; j < c.size; j++) {
+	    Formula cj = negate ? neg(lit2fml(c[j])) : lit2fml(c[j]);
+	    if (cj != ps[j]) ps[j] = cj, lastOK = false;
+	    if (c(j) != Cs[j]) Cs[j] = c(j), lastOK = false;
+        }
 
     vec<Int> dummy;
     int      cost;
-    vec<int> base;
-    optimizeBase(Cs, dummy, cost, base);
+    static vec<int> base;
+    if (!lastOK) {
+        optimizeBase(Cs, dummy, cost, base);
+        /**/pf("cost=%d, base.size=%d\n", cost, base.size());
+    } else if (lastRet == _undef_) {
+        if (lastCost > max_cost) return _undef_;
+        lastOK = false;
+    }
     FEnv::push();
 
     Formula ret;
     try {
-        ret = buildConstraint(ps, Cs, base, c.lo, c.hi, max_cost);
+      ret = buildConstraint(ps, Cs, base, lo, hi, max_cost, lastOK);
     }catch (Exception_TooBig){
+        lastCost = FEnv::topSize();
         FEnv::pop();
+        lastRet = _undef_; //ps.clear(); Cs.clear();
         return _undef_;
     }
 
@@ -396,6 +444,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
         reportf("Sorter-cost:%5d     ", FEnv::topSize());
         reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
     }
+    lastCost = FEnv::topSize(), lastRet = ret;
     FEnv::keep();
     return ret;
 }

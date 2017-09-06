@@ -543,6 +543,7 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_convert_goal != ct_Undef)
         opt_convert = opt_convert_goal;
     opt_sort_thres *= opt_goal_bias;
+    opt_sort_alg = 1;  // OddEvenSort - M. Piotrow 20.07.2017
 
     if (opt_goal != Int_MAX)
         addConstr(goal_ps, goal_Cs, opt_goal, -1),
@@ -580,7 +581,6 @@ void PbSolver::solve(solve_Command cmd)
             for (Var x = 0; x < pb_n_vars; x++)
                 assert(sat_solver.model[x] != l_Undef),
                 best_model.push(sat_solver.model[x] == l_True);
-
             if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
                 break;
 

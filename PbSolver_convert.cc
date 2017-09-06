@@ -45,8 +45,17 @@ bool PbSolver::convertPbs(bool first_call)
         if (opt_verbosity >= 1)
             /**/reportf("---[%4d]---> ", constrs.size() - 1 - i);
 
-        if (opt_convert == ct_Sorters)
-            converted_constrs.push(buildConstraint(c));
+        if (opt_convert == ct_Sorters) {
+            // converted_constrs.push(buildConstraint(c));
+            int adder_cost = estimatedAdderCost(c);
+            Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * 15));
+            if (result == _undef_)
+                result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
+            if (result == _undef_)
+                linearAddition(c, converted_constrs);
+            else
+                converted_constrs.push(result);
+        }
         else if (opt_convert == ct_Adders)
             linearAddition(c, converted_constrs);
         else if (opt_convert == ct_BDDs)

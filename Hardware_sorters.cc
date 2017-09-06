@@ -234,7 +234,7 @@ static void DirectSort(vec<Formula>& vars, unsigned k, int ineq) {
 
 static void DirectMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<Formula>& outvars, unsigned k, int ineq) {
   // k is the desired size of sorted output; 1s (if ineq < ) or 0s (else will be propagated from inputs to outputs.
-  assert(outvars.empty());
+  assert(outvars.size() == 0);
   
   unsigned n = in1.size(), m = in2.size(), c = min(n+m,k), a = min(n,c), b = min(m,c);
 
@@ -581,7 +581,7 @@ static bool directOddEvenSelect(const vec<Formula>& invars, vec<Formula>& outvar
 }
 
 static void dirOddEvenSelect(const vec<Formula>& invars, vec<Formula>& outvars, unsigned k,int ineq) {
-  assert(outvars.empty());
+  assert(outvars.size() == 0);
 
   unsigned n = invars.size();
 
@@ -738,7 +738,7 @@ static void dirOddEvenMerge(const vec<Formula>& in1, const vec<Formula>& in2, ve
 }
 
 static void dirDirectSort(const vec<Formula>& invars, vec<Formula>& outvars, unsigned k, int ineq) {
-  assert(outvars.empty());
+  assert(outvars.size() == 0);
   unsigned n = invars.size();
   vec<Lit> in, out;
   
