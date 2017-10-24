@@ -67,6 +67,7 @@ void linearAddition(const Linear& l, vec<Formula>& out)
         bits++;
 
     int     nodes = FEnv::nodes.size();
+    FEnv::push(); // M.Piotrow 5.10.2017
 
     addPb(inp,cs,sum,bits);
     if (opt_verbosity >= 1){

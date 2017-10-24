@@ -18,6 +18,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 #include "Hardware.h"
+#include "FEnv.h"
 
 struct Clausifier
 {
@@ -321,16 +322,34 @@ Lit Clausifier::basicClausify(Formula f)
 void clausify(SimpSolver& s, const vec<Formula>& fs, Minisat::vec<Lit>& out)
 {
     Clausifier c(s);
+    bool optimize_memory = fs.size() > 1 && FEnv::stack.size() == fs.size() &&
+                                            FEnv:: stack[0] == 0; // M. Piotrow 5.10.2017
 
     for (int i = 0; i < fs.size(); i++)
         c.usage(fs[i]);
 
-    if (opt_convert_weak)
-        for (int i = 0; i < fs.size(); i++)
+    if (opt_convert_weak) 
+        for (int i = fs.size()-1; i >= 0; i--) { // M. Piotrow 5.10.2017
             out.push(c.polarityClausify(fs[i]));
+	    if (optimize_memory) { // M. Piotrow 5.10.2017
+	        int diff = FEnv::nodes.size() - FEnv::stack.last();
+	        if (diff > 1000) FEnv::nodes.shrink(diff);
+		FEnv::stack.pop();
+	    }
+	}
     else
-        for (int i = 0; i < fs.size(); i++)
+        for (int i = fs.size()-1; i >= 0; i--) { // M. Piotrow 5.10.2017
             out.push(c.basicClausify(fs[i]));
+	    if (optimize_memory) { // M. Piotrow 5.10.2017
+	        int diff = FEnv::nodes.size() - FEnv::stack.last();
+	        if (diff > 1000) FEnv::nodes.shrink(diff);
+		FEnv::stack.pop();
+	    }
+	}
+    if (optimize_memory) {  // M. Piotrow 9.10.2017
+        FEnv::clear();
+        c.occ.clear(); c.vmap.clear(); c.vmapp.clear();
+    }
 }
 
 

@@ -274,6 +274,26 @@ static void SIGTERM_handler(int /*signum*/) {
     _exit(0);
 }
 
+static void increase_stack_size(int new_size) // M. Piotrow 16.10.2017
+{
+#if !defined(_MSC_VER) && !defined(__MINGW32__)
+#include <sys/resource.h>
+  
+  struct rlimit rl;
+  rlim_t new_mem_lim = new_size*1024*1024;
+  getrlimit(RLIMIT_STACK,&rl);
+  if (rl.rlim_max == RLIM_INFINITY || new_mem_lim < rl.rlim_max) {
+    rl.rlim_cur = new_mem_lim;
+    if (setrlimit(RLIMIT_STACK, &rl) == -1)
+      reportf("WARNING! Could not set resource limit: Stack memory.\n");
+    else
+      reportf("Setting stack limit to %dMB.\n",new_size);
+  }
+#else
+  reportf("WARNING! Setting stack limit not supported on this architecture.\n");
+#endif
+}
+
 
 PbSolver::solve_Command convert(Command cmd) {
     switch (cmd){
@@ -315,6 +335,7 @@ int main(int argc, char** argv)
         signal(ENOMEM, SIGTERM_handler); 
         Minisat::limitMemory(opt_mem_lim);
     }
+    increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     parse_PB_file(opt_input, *pb_solver, opt_old_format);
     pb_solver->solve(convert(opt_command));
