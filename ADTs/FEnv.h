@@ -350,9 +350,11 @@ namespace FEnv {
     macro void push()  { stack.push(nodes.size()); }
     macro void pop()   {
         while (nodes.size() > stack.last())
-            uniqueness_table.remove(nodes.last()),
-            nodes.pop(); }
-    macro void keep()  { stack.pop(); }
+            uniqueness_table.exclude(nodes.last()), // M. Piotrow 9.10.2017 (remove replaced by exclude)
+            nodes.pop();
+	stack.pop(); // M. Piotrow 5.10.2017
+    }
+    macro void keep()  { } //  stack.pop(); } M. Piotrow 5.10.2017
     macro int  topSize() {
         return (stack.size() == 0) ? nodes.size() : nodes.size() - stack.last(); }
 }
