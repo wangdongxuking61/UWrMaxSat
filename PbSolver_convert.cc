@@ -50,7 +50,7 @@ bool PbSolver::convertPbs(bool first_call)
 	  int adder_cost = estimatedAdderCost(c);
 	  Int max_coeff = c(c.size-1);
 	  int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
-	  int add_sort_factor = (max_log > 20 ? 1 : max_log <= 10 ? 15 : 22-max_log);
+	  double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
             Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * add_sort_factor));
             if (result == _undef_)
                 result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
