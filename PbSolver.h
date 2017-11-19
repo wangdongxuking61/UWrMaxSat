@@ -153,6 +153,7 @@ public:
     void    allocConstrs(int n_vars, int n_constrs);
     void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
     bool    addConstr   (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq);
+    bool    addConstr2  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit llt);
 
     // Solve:
     //

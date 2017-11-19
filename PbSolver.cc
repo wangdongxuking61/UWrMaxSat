@@ -62,6 +62,9 @@ void PbSolver::addGoal(const vec<Lit>& ps, const vec<Int>& Cs)
     goal = new (xmalloc<char>(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, Int_MIN, Int_MAX);
 }
 
+bool PbSolver::addConstr2(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit llt) {
+
+}
 
 bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq)
 {
@@ -559,11 +562,24 @@ void PbSolver::solve(solve_Command cmd)
     signal(SIGINT, SIGINT_interrupt);
     signal(SIGXCPU,SIGINT_interrupt);
 
-    bool    sat = false;
+    bool    sat = false, exec_loop = true;;
+    int     assump_litn;
+    vec<Lit> assump_ps;
+    Int     try_lessthan = opt_goal;
+    Int     LB_goalvalue = Int_MIN;
     int     n_solutions = 0;    // (only for AllSolutions mode)
-    while (sat_solver.solve()){
-        if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
+    
+
+    while (exec_loop) {
+      if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
+      if (sat_solver.solve(assump_ps)) { // SAT returned
+        if(assump_ps.size()>0) {
+          assert(assump_ps.size() ==1);
+          sat_solver.addUnit(assump_ps[0]);
+        }
+        assump_ps.clear();
         sat = true;
+
         if (cmd == sc_AllSolutions){
             Minisat::vec<Lit>    ban;
             n_solutions++;
@@ -575,7 +591,6 @@ void PbSolver::solve(solve_Command cmd)
             }
             reportf("\n");
             sat_solver.addClause(ban);
-
         }else{
             best_model.clear();
             for (Var x = 0; x < pb_n_vars; x++)
@@ -591,11 +606,44 @@ void PbSolver::solve(solve_Command cmd)
                 char* tmp = toString(best_goalvalue);
                 reportf("\bFound solution: %s\b\n", tmp);
                 xfree(tmp); }
-            if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2))
+            if(opt_minimization==0) {
+              try_lessthan = best_goalvalue;
+              if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2))
                 break;
+            } else {
+              Int lb = Int_MAX;
+              assump_litn = sat_solver.newVar(true);
+              Lit assump_lit = Lit(assump_litn);
+
+              try_lessthan = LB_goalvalue + best_goalvalue;
+
+              if (!addConstr2(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
+                break; // unsat
+
+              assump_ps.push(assump_lit);
+            }
             convertPbs(false);
         }
-    }
+      } else { // UNSAT returned
+        if(assump_ps.size() == 0) {
+          exec_loop = false;
+        } else {
+          if(assump_ps.size() > 0) {
+            assert(assump_ps.size() == 1);
+            sat_solver.addUnit(~(assump_ps[0]));
+          }
+          assump_ps.clear();
+          LB_goalvalue = try_lessthan;
+          try_lessthan = best_goalvalue;
+
+          if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2))  // <
+            break;  // unsat
+          
+          convertPbs(false);
+        }
+      }         
+    } // END OF LOOP
+
     if (goal == NULL && sat)
         best_goalvalue = Int_MIN;       // (found model, but don't care about it)
     if (opt_verbosity >= 1){

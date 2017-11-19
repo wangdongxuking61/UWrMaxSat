@@ -441,8 +441,8 @@ Formula buildConstraint(const Linear& c, int max_cost)
     }
 
     if (opt_verbosity >= 1){
-        reportf("Sorter-cost:%5d     ", FEnv::topSize());
-        reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
+        //reportf("Sorter-cost:%5d     ", FEnv::topSize());
+        //reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
     }
     lastCost = FEnv::topSize(), lastRet = ret;
     FEnv::keep();

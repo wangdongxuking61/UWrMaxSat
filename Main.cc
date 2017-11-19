@@ -57,8 +57,12 @@ int      opt_sort_alg      = 1;
 int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 
+int      opt_minimization  = 0; // 0 = sequential. 1 = alternating
+int      opt_seq_thres     = 3;
+
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
+
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -87,6 +91,7 @@ cchar* doc =
     "\n"
     "  -p -pbvars    Restrict decision heuristic of SAT to original PB variables.\n"
     "  -ps{+,-,0}    Polarity suggestion in SAT towards/away from goal (or neutral).\n"
+    "  -alt          Alternative search for minimization.\n"
     "\n"
     "Input options:\n"
     "  -of -old-fmt  Use old variant of OPB file format.\n"
@@ -159,6 +164,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "ps+"       )) opt_polarity_sug = +1;
             else if (oneof(arg, "ps-"       )) opt_polarity_sug = -1;
             else if (oneof(arg, "ps0"       )) opt_polarity_sug =  0;
+            else if (oneof(arg, "alt"       )) opt_minimization =  1;
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
 

@@ -77,7 +77,7 @@ Formula convertToBdd(const Linear& c, int max_cost)
         FEnv::pop();
     else{
         if (opt_verbosity >= 1)
-            reportf("BDD-cost:%5d\n", FEnv::topSize());
+            // reportf("BDD-cost:%5d\n", FEnv::topSize());
         FEnv::keep();
     }
     return ret;

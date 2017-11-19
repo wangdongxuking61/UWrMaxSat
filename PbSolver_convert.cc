@@ -43,7 +43,7 @@ bool PbSolver::convertPbs(bool first_call)
         Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
 
         if (opt_verbosity >= 1)
-            /**/reportf("---[%4d]---> ", constrs.size() - 1 - i);
+            /**///reportf("---[%4d]---> ", constrs.size() - 1 - i);
 	try { // M. Piotrow 11.10.2017
         if (opt_convert == ct_Sorters) {
             // converted_constrs.push(buildConstraint(c));
