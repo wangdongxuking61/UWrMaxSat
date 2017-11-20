@@ -59,11 +59,44 @@ void PbSolver::addGoal(const vec<Lit>& ps, const vec<Int>& Cs)
     /**/debug_names = &index2name;
     //**/reportf("MIN: "); dump(ps, Cs); reportf("\n");
 
-    goal = new (xmalloc<char>(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, Int_MIN, Int_MAX);
+    goal = new (xmalloc<char>(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, Int_MIN, Int_MAX, lit_Undef);
 }
 
-bool PbSolver::addConstr2(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit llt) {
+bool PbSolver::addConstr2(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit) {
+  vec<Lit>    norm_ps;
+  vec<Int>    norm_Cs;
+  Int         norm_rhs;
+  Lit         norm_lit;
 
+  #define Copy2    do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push( Cs[i]); norm_rhs =  rhs;  norm_lit = lit; }while(0)
+  #define CopyInv2 do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push(-Cs[i]); norm_rhs = -rhs;  norm_lit = lit; }while(0)
+
+  // non-normalize ORIGINAL
+  if (ineq == 0){  // ==
+    assert(rhs2==Int_MAX);
+
+    Copy2;
+    if (normalizePb2(norm_ps, norm_Cs, norm_rhs, norm_lit))
+      storePb2(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+
+    CopyInv2;
+    if (normalizePb2(norm_ps, norm_Cs, norm_rhs, norm_lit))
+      storePb2(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+  }else{ // case that ineq is not =
+    if (ineq > 0)
+      Copy2;
+    else {
+      CopyInv2;
+      ineq = -ineq;
+    }
+    if (ineq == 2)
+      ++norm_rhs;
+
+    Copy2;
+    if (normalizePb2(norm_ps, norm_Cs, norm_rhs, norm_lit))
+      storePb2(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+  }
+  return okay();
 }
 
 bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq)
@@ -111,6 +144,125 @@ bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int in
 
 static Int gcd(Int small, Int big) {
     return (small == 0) ? big: gcd(big % small, small); }
+
+bool PbSolver::normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
+{
+    assert(ps.size() == Cs.size());
+    if (!okay()) return false;
+
+    // Remove assigned literals and literals with zero coefficients:
+    int new_sz = 0;
+    for (int i = 0; i < ps.size(); i++){
+        if (value(ps[i]) != l_Undef){
+            if (value(ps[i]) == l_True)
+                C -= Cs[i];
+        }else if (Cs[i] != 0){
+            ps[new_sz] = ps[i];
+            Cs[new_sz] = Cs[i];
+            new_sz++;
+        }
+    }
+    ps.shrink(ps.size() - new_sz);
+    Cs.shrink(Cs.size() - new_sz);
+    //**/reportf("No zero, no assigned :"); for (int i = 0; i < ps.size(); i++) reportf(" %d*%sx%d", Cs[i], sign(ps[i])?"~":"", var(ps[i])); reportf(" >= %d\n", C);
+
+    // Group all x/~x pairs
+    //
+    Map<Var, Pair<Int,Int> >    var2consts(Pair_new(0,0));     // Variable -> negative/positive polarity constant
+    for (int i = 0; i < ps.size(); i++){
+        Var             x      = var(ps[i]);
+        Pair<Int,Int>   consts = var2consts.at(x);
+        if (sign(ps[i]))
+            consts.fst += Cs[i];
+        else
+            consts.snd += Cs[i];
+        var2consts.set(x, consts);
+    }
+
+    // Normalize constants to positive values only:
+    //
+    vec<Pair<Var, Pair<Int,Int> > > all;
+    var2consts.pairs(all);
+    vec<Pair<Int,Lit> > Csps(all.size());
+    for (int i = 0; i < all.size(); i++){
+        if (all[i].snd.fst < all[i].snd.snd){
+            // Negative polarity will vanish
+            C -= all[i].snd.fst;
+            Csps[i] = Pair_new(all[i].snd.snd - all[i].snd.fst, mkLit(all[i].fst));
+        }else{
+            // Positive polarity will vanish
+            C -= all[i].snd.snd;
+            Csps[i] = Pair_new(all[i].snd.fst - all[i].snd.snd, ~mkLit(all[i].fst));
+        }
+    }
+
+    // Sort literals on growing constant values:
+    //
+    sort(Csps);     // (use lexicographical order of 'Pair's here)
+    Int     sum = 0;
+    for (int i = 0; i < Csps.size(); i++){
+        Cs[i] = Csps[i].fst, ps[i] = Csps[i].snd, sum += Cs[i];
+        if (sum < 0) fprintf(stderr, "ERROR! Too large constants encountered in constraint.\n"), exit(1);
+    }
+    ps.shrink(ps.size() - Csps.size());
+    Cs.shrink(Cs.size() - Csps.size());
+
+    // Propagate already present consequences:
+    //
+    bool changed;
+    do{
+        changed = false;
+        while (ps.size() > 0 && sum-Cs.last() < C){
+            changed = true;
+            if (lit != lit_Undef) {
+              vec<Lit> ban;
+              ban.push( ~lit );
+              ban.push(ps.last());
+              addClause(ban);
+            } else if (!addUnit(ps.last())) {
+              sat_solver.addEmptyClause();;
+              return false;
+            }
+            sum -= Cs.last();
+            C   -= Cs.last();
+            ps.pop(); Cs.pop();
+        }
+
+        // Trivially true or false?
+        if (C <= 0)
+          return false;
+        if (sum < C) {
+          // if(llt!=lit_Undef) { // Michal K - nie wiem czy to jest potrzebne
+          //   if (!addUnit(~llt))
+          //     ok = false;
+          // } else ok = false;
+          sat_solver.addEmptyClause();
+          return false;
+        }
+        assert(sum - Cs[ps.size()-1] >= C);
+
+        // GCD:
+        assert(Cs.size() > 0);
+        Int     div = Cs[0];
+        for (int i = 1; i < Cs.size(); i++)
+            div = gcd(div, Cs[i]);
+        for (int i = 0; i < Cs.size(); i++)
+            Cs[i] /= div;
+        C = (C + div-1) / div;
+        if (div != 1)
+            changed = true;
+
+        // Trim constants:
+        for (int i = 0; i < Cs.size(); i++)
+            if (Cs[i] > C)
+                changed = true,
+                Cs[i] = C;
+    }while (changed);
+
+    //**/reportf("Normalized constraint:"); for (int i = 0; i < ps.size(); i++) reportf(" %d*%sx%d", Cs[i], sign(ps[i])?"~":"", var(ps[i])); reportf(" >= %d\n", C);
+
+    return true;
+}
 
 
 // Normalize a PB constraint to only positive constants. Depends on:
@@ -235,13 +387,25 @@ bool PbSolver::normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C)
     return true;
 }
 
+void PbSolver::storePb2(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit)
+{
+    assert(ps.size() == Cs.size());
+    for (int i = 0; i < ps.size(); i++)
+        n_occurs[toInt(ps[i])]++;
+
+    if(lit!=lit_Undef && n_occurs.size() > toInt(lit))
+    n_occurs[toInt(lit)]++;
+
+    constrs.push(new (mem.alloc(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, lo, hi, lit));
+}
+
 
 void PbSolver::storePb(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi)
 {
     assert(ps.size() == Cs.size());
     for (int i = 0; i < ps.size(); i++)
         n_occurs[toInt(ps[i])]++;
-    constrs.push(new (mem.alloc(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, lo, hi));
+    constrs.push(new (mem.alloc(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, lo, hi, lit_Undef));
     //**/reportf("STORED: "), dump(constrs.last()), reportf("\n");
 }
 
@@ -562,6 +726,123 @@ void PbSolver::solve(solve_Command cmd)
     signal(SIGINT, SIGINT_interrupt);
     signal(SIGXCPU,SIGINT_interrupt);
 
+    bool    sat = false;
+    int     n_solutions = 0;    // (only for AllSolutions mode)
+    while (sat_solver.solve()){
+        if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
+        sat = true;
+        if (cmd == sc_AllSolutions){
+            Minisat::vec<Lit>    ban;
+            n_solutions++;
+            reportf("MODEL# %d:", n_solutions);
+            for (Var x = 0; x < pb_n_vars; x++){
+                assert(sat_solver.model[x] != l_Undef);
+                ban.push(mkLit(x, sat_solver.model[x] == l_True));
+                reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
+            }
+            reportf("\n");
+            sat_solver.addClause(ban);
+
+        }else{
+            best_model.clear();
+            for (Var x = 0; x < pb_n_vars; x++)
+                assert(sat_solver.model[x] != l_Undef),
+                best_model.push(sat_solver.model[x] == l_True);
+            if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
+                break;
+
+            best_goalvalue = evalGoal(*goal, sat_solver.model);
+            if (cmd == sc_FirstSolution) break;
+
+            if (opt_verbosity >= 1){
+                char* tmp = toString(best_goalvalue);
+                reportf("\bFound solution: %s\b\n", tmp);
+                xfree(tmp); }
+            if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2))
+                break;
+            convertPbs(false);
+        }
+    }
+    if (goal == NULL && sat)
+        best_goalvalue = Int_MIN;       // (found model, but don't care about it)
+    if (opt_verbosity >= 1){
+        if      (!sat)
+            reportf("\bUNSATISFIABLE\b\n");
+        else if (goal == NULL)
+            reportf("\bSATISFIABLE: No goal function specified.\b\n");
+        else if (cmd == sc_FirstSolution){
+            char* tmp = toString(best_goalvalue);
+            reportf("\bFirst solution found: %s\b\n", tmp);
+            xfree(tmp);
+        }else if (asynch_interrupt){
+            char* tmp = toString(best_goalvalue);
+            reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
+            xfree(tmp);
+       }else{
+            char* tmp = toString(best_goalvalue);
+            reportf("\bOptimal solution: %s\b\n", tmp);
+            xfree(tmp);
+        }
+    }
+}
+
+void PbSolver::solve2(solve_Command cmd)
+{
+    if (!okay()) {
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        return;
+    }
+
+    // Convert constraints:
+    pb_n_vars = nVars();
+    pb_n_constrs = constrs.size();
+    if (opt_verbosity >= 1) reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
+    propagate();
+    if (!convertPbs(true)){
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        assert(!okay()); return; 
+    }
+
+    // Freeze goal function variables (for SatELite):
+    if (goal != NULL){
+        for (int i = 0; i < goal->size; i++)
+            sat_solver.setFrozen(var((*goal)[i]), true);
+    }
+
+    // Solver (optimize):
+    //sat_solver.setVerbosity(opt_verbosity);
+    sat_solver.verbosity = opt_verbosity;
+
+    vec<Lit> goal_ps; if (goal != NULL){ for (int i = 0; i < goal->size; i++) goal_ps.push((*goal)[i]); }
+    vec<Int> goal_Cs; if (goal != NULL){ for (int i = 0; i < goal->size; i++) goal_Cs.push((*goal)(i)); }
+    assert(best_goalvalue == Int_MAX);
+
+    if (opt_polarity_sug != 0){
+        for (int i = 0; i < goal_Cs.size(); i++){
+            bool dir = goal_Cs[i]*opt_polarity_sug > 0 ? !sign(goal_ps[i]) : sign(goal_ps[i]);
+            sat_solver.setPolarity(var(goal_ps[i]), /*lbool*/(dir));
+        }
+    }
+
+    if (opt_convert_goal != ct_Undef)
+        opt_convert = opt_convert_goal;
+    opt_sort_thres *= opt_goal_bias;
+    opt_sort_alg = 1;  // OddEvenSort - M. Piotrow 20.07.2017
+
+    if (opt_goal != Int_MAX)
+        addConstr(goal_ps, goal_Cs, opt_goal, -1),
+        convertPbs(false);
+
+    if (opt_cnf != NULL)
+        reportf("Exporting CNF to: \b%s\b\n", opt_cnf),
+        sat_solver.toDimacs(opt_cnf),
+        exit(0);
+    if (opt_verbosity >= 1)
+        sat_solver.printVarsCls();
+    pb_solver = this;
+    signal(SIGINT, SIGINT_interrupt);
+    signal(SIGXCPU,SIGINT_interrupt);
+
     bool    sat = false, exec_loop = true;;
     int     assump_litn;
     vec<Lit> assump_ps;
@@ -574,8 +855,8 @@ void PbSolver::solve(solve_Command cmd)
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
       if (sat_solver.solve(assump_ps)) { // SAT returned
         if(assump_ps.size()>0) {
-          assert(assump_ps.size() ==1);
-          sat_solver.addUnit(assump_ps[0]);
+          assert(assump_ps.size() == 1);
+          addUnit(assump_ps[0]);
         }
         assump_ps.clear();
         sat = true;
@@ -590,7 +871,7 @@ void PbSolver::solve(solve_Command cmd)
                 reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
             }
             reportf("\n");
-            sat_solver.addClause(ban);
+            sat_solver.addClause_(ban);
         }else{
             best_model.clear();
             for (Var x = 0; x < pb_n_vars; x++)
@@ -613,7 +894,7 @@ void PbSolver::solve(solve_Command cmd)
             } else {
               Int lb = Int_MAX;
               assump_litn = sat_solver.newVar(true);
-              Lit assump_lit = Lit(assump_litn);
+              Lit assump_lit = mkLit(assump_litn);
 
               try_lessthan = LB_goalvalue + best_goalvalue;
 
@@ -630,7 +911,7 @@ void PbSolver::solve(solve_Command cmd)
         } else {
           if(assump_ps.size() > 0) {
             assert(assump_ps.size() == 1);
-            sat_solver.addUnit(~(assump_ps[0]));
+            addUnit(~(assump_ps[0]));
           }
           assump_ps.clear();
           LB_goalvalue = try_lessthan;

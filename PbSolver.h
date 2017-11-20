@@ -46,12 +46,13 @@ class Linear {
 public:
     int     size;       // Terms in constraint.
     Int     lo, hi;     // Sum should be in interval [lo,hi] (inclusive).
+    Lit     lit;        // Literal implies constraint (lit_Undef for normal case).
 private:
     char    data[0];    // (must be last element of the struct)
 public:
     // NOTE: Cannot be used by normal 'new' operator!
-    Linear(const vec<Lit>& ps, const vec<Int>& Cs, Int low, Int high) {
-        orig_size = size = ps.size(), lo = low, hi = high;
+    Linear(const vec<Lit>& ps, const vec<Int>& Cs, Int low, Int high, Lit ll) {
+        orig_size = size = ps.size(), lo = low, hi = high; lit = ll;
         char* p = data;
         for (int i = 0; i < ps.size(); i++) *(Lit*)p = ps[i], p += sizeof(Lit);
         for (int i = 0; i < Cs.size(); i++) new ((Int*)p) Int(Cs[i]), p += sizeof(Int); }
@@ -103,7 +104,9 @@ protected:
         return sat_solver.addClause_(tmp_clause); }
         
     bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C);
+    bool    normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
     void    storePb    (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi);
+    void    storePb2   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
     void    findIntervals();
     bool    rewriteAlmostClauses();
@@ -153,7 +156,7 @@ public:
     void    allocConstrs(int n_vars, int n_constrs);
     void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
     bool    addConstr   (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq);
-    bool    addConstr2  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit llt);
+    bool    addConstr2  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
 
     // Solve:
     //
@@ -161,6 +164,7 @@ public:
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
     void    solve(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
+    void    solve2(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
 };
 
 

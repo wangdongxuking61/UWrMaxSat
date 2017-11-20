@@ -344,7 +344,11 @@ int main(int argc, char** argv)
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     parse_PB_file(opt_input, *pb_solver, opt_old_format);
-    pb_solver->solve(convert(opt_command));
+
+    if(opt_minimization == 0)
+      pb_solver->solve(convert(opt_command));
+    else
+      pb_solver->solve2(convert(opt_command));
 
     if (pb_solver->goal == NULL && pb_solver->best_goalvalue != Int_MAX)
         opt_command = cmd_FirstSolution;    // (otherwise output will be wrong)
