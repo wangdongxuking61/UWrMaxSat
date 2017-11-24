@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 //=================================================================================================
 
+#define lit2fml(p) id(var(var(p)),sign(p))
 
 static
 //Formula buildBDD(const Linear& c, int size, int lower_limit, int upper_limit, int material_left, Map<Pair<int,Int>,Formula>& memo, int max_cost)
@@ -80,5 +81,13 @@ Formula convertToBdd(const Linear& c, int max_cost)
             // reportf("BDD-cost:%5d\n", FEnv::topSize());
         FEnv::keep();
     }
-    return ret;
+
+    if(ret == _undef_ || (c.lit == lit_Undef))
+        return ret;
+    else {
+        Formula f = _1_ ;
+        if(c.lit != lit_Undef)
+            f &= ~lit2fml(c.lit) | ret ;   // llt => ret
+        return f;
+    }
 }

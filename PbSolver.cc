@@ -92,7 +92,7 @@ bool PbSolver::addConstr2(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int i
     if (ineq == 2)
       ++norm_rhs;
 
-    Copy2;
+    //Copy2;
     if (normalizePb2(norm_ps, norm_Cs, norm_rhs, norm_lit))
       storePb2(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
   }
@@ -164,7 +164,7 @@ bool PbSolver::normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
     }
     ps.shrink(ps.size() - new_sz);
     Cs.shrink(Cs.size() - new_sz);
-    //**/reportf("No zero, no assigned :"); for (int i = 0; i < ps.size(); i++) reportf(" %d*%sx%d", Cs[i], sign(ps[i])?"~":"", var(ps[i])); reportf(" >= %d\n", C);
+    //**/reportf("No zero, no assigned :"); for (int i = 0; i < ps.size(); i++) reportf(" %d*%sx%d", toint(Cs[i]), sign(ps[i])?"~":"", var(ps[i])); reportf(" >= %d\n", toint(C));
 
     // Group all x/~x pairs
     //
@@ -220,7 +220,7 @@ bool PbSolver::normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
               ban.push(ps.last());
               addClause(ban);
             } else if (!addUnit(ps.last())) {
-              sat_solver.addEmptyClause();;
+              sat_solver.addEmptyClause();
               return false;
             }
             sum -= Cs.last();
@@ -232,12 +232,12 @@ bool PbSolver::normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
         if (C <= 0)
           return false;
         if (sum < C) {
-          // if(llt!=lit_Undef) { // Michal K - nie wiem czy to jest potrzebne
-          //   if (!addUnit(~llt))
-          //     ok = false;
-          // } else ok = false;
-          sat_solver.addEmptyClause();
-          return false;
+           if(lit!=lit_Undef) addUnit(~lit); // {  Michal K - nie wiem czy to jest potrzebne
+           //   if (!addUnit(~llt))
+           //     ok = false;
+           // } else ok = false;
+           else sat_solver.addEmptyClause();
+         return false;
         }
         assert(sum - Cs[ps.size()-1] >= C);
 
@@ -843,12 +843,16 @@ void PbSolver::solve2(solve_Command cmd)
     signal(SIGINT, SIGINT_interrupt);
     signal(SIGXCPU,SIGINT_interrupt);
 
-    bool    sat = false, exec_loop = true;;
+    bool    sat = false, exec_loop = true;
     int     assump_litn;
-    vec<Lit> assump_ps;
+    Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
-    Int     LB_goalvalue = Int_MIN;
+    Int     LB_goalvalue = 0;
     int     n_solutions = 0;    // (only for AllSolutions mode)
+    
+    if (goal != NULL)
+      for (int i = 0; i < goal_Cs.size(); ++i)
+	if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
     
 
     while (exec_loop) {
@@ -892,11 +896,10 @@ void PbSolver::solve2(solve_Command cmd)
               if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2))
                 break;
             } else {
-              Int lb = Int_MAX;
-              assump_litn = sat_solver.newVar(true);
+              assump_litn = sat_solver.newVar(true, !opt_branch_pbvars);
               Lit assump_lit = mkLit(assump_litn);
 
-              try_lessthan = LB_goalvalue + best_goalvalue;
+              try_lessthan = LB_goalvalue/opt_bin_coeff + best_goalvalue*(opt_bin_coeff-1)/opt_bin_coeff;
 
               if (!addConstr2(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
                 break; // unsat

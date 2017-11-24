@@ -20,6 +20,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "PbSolver.h"
 #include "Hardware.h"
 
+#define lit2fml(p) id(var(var(p)),sign(p))
 
 // Write 'd' in binary, then substitute 0 with '_0_', 1 with 'f'. This is the resulting 'out' vector.
 //
@@ -33,8 +34,9 @@ static inline void bitAdder(Int d, Formula f, vec<Formula>& out)
 // Produce a conjunction of formulas that forces the constraint 'xs <= ys'. The formulas will
 // be pushed onto 'out'.
 //
-static void lte(vec<Formula>& xs, vec<Formula>& ys, vec<Formula>& out)
+static Formula lte(vec<Formula>& xs, vec<Formula>& ys)
 {
+    Formula f =_1_;
     for (int i = 0; i < xs.size(); i++){
         Formula c = _0_;
         for (int j = i+1; j < max(xs.size(), ys.size()); j++){
@@ -45,9 +47,9 @@ static void lte(vec<Formula>& xs, vec<Formula>& ys, vec<Formula>& out)
         c = c | ~xs[i] | (i < ys.size() ? ys[i] : _0_);
         assert(c != _0_);
         if (c != _1_)
-            out.push(c);
+            f &= c;
     }
-
+    return f;
 }
 
 void linearAddition(const Linear& l, vec<Formula>& out)
@@ -75,76 +77,20 @@ void linearAddition(const Linear& l, vec<Formula>& out)
         //reportf("Adder-cost: %d   maxlim: %s   bits: %d/%d\n", FEnv::nodes.size() - nodes, tmp, sum.size(), bits);
         xfree(tmp); }
 
-
+    Formula f = _1_;
     if (l.lo != Int_MIN){
         //reportf("lower limit\n");
         bitAdder(l.lo,_1_,inp);
-        lte(inp,sum,out);
+        f &= lte(inp,sum);
     }
     if (l.hi != Int_MAX){
         //reportf("upper limit\n");
         bitAdder(l.hi,_1_,inp);
-        lte(sum,inp,out);
+        f &= lte(sum,inp);
     }
+
+    if(l.lit==lit_Undef)
+      out.push( f );
+    else
+      out.push( ~lit2fml(l.lit) | f );  // lit => f
 }
-
-
-//-------------------------------------------------------------------------------------------------
-// (old)
-
-#if 0
-bool PbSolver::convertPbs(void)
-{
-    vec<Formula> fs;
-    vec<Lit>     ts;
-
-    if (!rewriteAlmostClauses())
-        return false;
-
-    // construct formulas for all constraints
-    for (int i = 0; i < constrs.size(); i++){
-        if (constrs[i] == NULL) continue;
-
-        /**/reportf("---[%4d]---> ", constrs.size() - 1 - i);
-        linearAddition2(*constrs[i], fs);
-    }
-
-    clausify(sat_solver,fs,ts);
-
-    for (int i = 0; i < ts.size(); i++)
-        sat_solver.addUnit(ts[i]);
-
-    constrs.clear();
-    mem.clear();
-
-    return sat_solver.okay();
-}
-
-
-static void linearAddition(const Linear& l, vec<Formula>& out)
-{
-    vec<Formula> sum;
-    vec<Formula> x, y;
-
-    //reportf("linearAddition\n");
-    for (int i = 0; i < l.size; i++){
-        sum.moveTo(x);
-        bitAdder(l(i), id(var(var(l[i])),sign(l[i])), y);
-        //reportf("step %d, x = %d, y = %d\n", i, x.size(), y.size());
-        rippleAdder(x,y,sum);
-    }
-
-    //reportf("size: %d\n", sum.size());
-
-    if (l.lo != Int_MIN){
-        //reportf("lower limit\n");
-        bitAdder(l.lo,_1_,x);
-        lte(x,sum,out);
-    }
-    if (l.hi != Int_MAX){
-        //reportf("upper limit\n");
-        bitAdder(l.lo,_1_,x);
-        lte(sum,x,out);
-    }
-}
-#endif
