@@ -103,10 +103,8 @@ protected:
         tmp_clause.clear(); for (int i = 0; i < ps.size(); i++) tmp_clause.push(ps[i]);
         return sat_solver.addClause_(tmp_clause); }
         
-    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C);
-    bool    normalizePb2(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
-    void    storePb    (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi);
-    void    storePb2   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
+    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
+    void    storePb   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
     void    findIntervals();
     bool    rewriteAlmostClauses();
@@ -155,8 +153,7 @@ public:
     int     getVar      (cchar* name);
     void    allocConstrs(int n_vars, int n_constrs);
     void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
-    bool    addConstr   (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq);
-    bool    addConstr2  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
+    bool    addConstr  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
 
     // Solve:
     //
@@ -164,7 +161,6 @@ public:
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
     void    solve(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
-    void    solve2(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
 };
 
 

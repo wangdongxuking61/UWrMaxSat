@@ -346,10 +346,7 @@ int main(int argc, char** argv)
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     parse_PB_file(opt_input, *pb_solver, opt_old_format);
 
-    if(opt_minimization == 0)
-      pb_solver->solve(convert(opt_command));
-    else
-      pb_solver->solve2(convert(opt_command));
+    pb_solver->solve(convert(opt_command));
 
     if (pb_solver->goal == NULL && pb_solver->best_goalvalue != Int_MAX)
         opt_command = cmd_FirstSolution;    // (otherwise output will be wrong)
