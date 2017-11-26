@@ -267,9 +267,9 @@ static void SIGINT_handler(int /*signum*/) {
     _exit(0); }     // (using 'exit()' rather than '_exit()' sometimes causes the solver to hang (why?))
 
 
-static void SIGTERM_handler(int /*signum*/) {
+static void SIGTERM_handler(int signum) {
     reportf("\n");
-    reportf("*** TERMINATED ***\n");
+    reportf("*** TERMINATED by signal %d ***\n", signum);
     if (opt_verbosity >= 1) {
         reportf("_______________________________________________________________________________\n\n");
         pb_solver->printStats();

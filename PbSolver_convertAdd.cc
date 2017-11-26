@@ -74,7 +74,7 @@ void linearAddition(const Linear& l, vec<Formula>& out)
     addPb(inp,cs,sum,bits);
     if (opt_verbosity >= 1){
         char* tmp = toString(maxlim);
-        //reportf("Adder-cost: %d   maxlim: %s   bits: %d/%d\n", FEnv::nodes.size() - nodes, tmp, sum.size(), bits);
+        reportf("Adder-cost: %d   maxlim: %s   bits: %d/%d\n", FEnv::nodes.size() - nodes, tmp, sum.size(), bits);
         xfree(tmp); }
 
     Formula f = _1_;
@@ -89,8 +89,5 @@ void linearAddition(const Linear& l, vec<Formula>& out)
         f &= lte(sum,inp);
     }
 
-    if(l.lit==lit_Undef)
-      out.push( f );
-    else
-      out.push( ~lit2fml(l.lit) | f );  // lit => f
+    out.push( l.lit==lit_Undef ? f : ~lit2fml(l.lit) | f );
 }

@@ -72,7 +72,7 @@ bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int in
   #define CopyInv do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push(-Cs[i]); norm_rhs = -rhs;  norm_lit = lit; }while(0)
 
   // non-normalize ORIGINAL
-  if (ineq == 0){  // ==
+  if (ineq == 0){
 
     Copy;
     if (normalizePb(norm_ps, norm_Cs, norm_rhs, norm_lit))
@@ -81,7 +81,7 @@ bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int in
     CopyInv;
     if (normalizePb(norm_ps, norm_Cs, norm_rhs, norm_lit))
       storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
-  }else{ // case that ineq is not =
+  }else{
     if (ineq > 0)
       Copy;
     else {
@@ -204,12 +204,10 @@ bool PbSolver::normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
         if (C <= 0)
           return false;
         if (sum < C) {
-           if(lit!=lit_Undef) addUnit(~lit);
-           //   if (!addUnit(~llt))
-           //     ok = false;
-           // } else ok = false;
-           else sat_solver.addEmptyClause();
-         return false;
+            if (lit != lit_Undef) 
+                addUnit(~lit);
+            else sat_solver.addEmptyClause();
+            return false;
         }
         assert(sum - Cs[ps.size()-1] >= C);
 
@@ -514,7 +512,8 @@ void PbSolver::solve(solve_Command cmd)
     // Convert constraints:
     pb_n_vars = nVars();
     pb_n_constrs = constrs.size();
-    if (opt_verbosity >= 1) reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
+    if (opt_verbosity >= 1)
+        reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
     propagate();
     if (!convertPbs(true)){
         if (opt_verbosity >= 1) sat_solver.printVarsCls();
@@ -561,7 +560,7 @@ void PbSolver::solve(solve_Command cmd)
     signal(SIGINT, SIGINT_interrupt);
     signal(SIGXCPU,SIGINT_interrupt);
 
-    bool    sat = false, exec_loop = true;
+    bool    sat = false;
     int     assump_litn;
     Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
@@ -573,10 +572,10 @@ void PbSolver::solve(solve_Command cmd)
 	if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
     
 
-    while (exec_loop) {
+    while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
       if (sat_solver.solve(assump_ps)) { // SAT returned
-        if(assump_ps.size()>0) {
+        if(assump_ps.size() > 0) {
           assert(assump_ps.size() == 1);
           addUnit(assump_ps[0]);
         }
@@ -609,40 +608,36 @@ void PbSolver::solve(solve_Command cmd)
                 char* tmp = toString(best_goalvalue);
                 reportf("\bFound solution: %s\b\n", tmp);
                 xfree(tmp); }
-            if((opt_minimization==0) || (best_goalvalue - LB_goalvalue < opt_seq_thres)) {
-              try_lessthan = best_goalvalue;
-              if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
-                break;
+            if(opt_minimization == 0 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
+                try_lessthan = best_goalvalue;
+                if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
+                    break;
             } else {
-              assump_litn = sat_solver.newVar(true, !opt_branch_pbvars);
-              Lit assump_lit = mkLit(assump_litn);
+                Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
 
-              try_lessthan = LB_goalvalue/opt_bin_coeff + best_goalvalue*(opt_bin_coeff-1)/opt_bin_coeff;
+                try_lessthan = LB_goalvalue/opt_bin_coeff + best_goalvalue*(opt_bin_coeff-1)/opt_bin_coeff;
 
-              if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
-                break; // unsat
+                if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
+                    break; // unsat
 
-              assump_ps.push(assump_lit);
+                assump_ps.push(assump_lit);
             }
             convertPbs(false);
         }
       } else { // UNSAT returned
-        if(assump_ps.size() == 0) {
-          exec_loop = false;
-        } else {
-          if(assump_ps.size() > 0) {
-            assert(assump_ps.size() == 1);
-            addUnit(~(assump_ps[0]));
-          }
-          assump_ps.clear();
-          LB_goalvalue = try_lessthan;
-          try_lessthan = best_goalvalue;
 
-          if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))  // <
+        if (assump_ps.size() == 0) break;
+
+        assert(assump_ps.size() == 1);
+        addUnit(~(assump_ps[0]));
+        assump_ps.clear();
+        LB_goalvalue = try_lessthan;
+        try_lessthan = best_goalvalue;
+
+        if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
             break;  // unsat
           
-          convertPbs(false);
-        }
+        convertPbs(false);
       }         
     } // END OF LOOP
 

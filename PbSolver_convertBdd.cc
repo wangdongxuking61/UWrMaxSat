@@ -78,16 +78,9 @@ Formula convertToBdd(const Linear& c, int max_cost)
         FEnv::pop();
     else{
         if (opt_verbosity >= 1)
-            // reportf("BDD-cost:%5d\n", FEnv::topSize());
+            /**/ reportf("BDD-cost:%5d\n", FEnv::topSize());
         FEnv::keep();
     }
 
-    if(ret == _undef_ || (c.lit == lit_Undef))
-        return ret;
-    else {
-        Formula f = _1_ ;
-        if(c.lit != lit_Undef)
-            f &= ~lit2fml(c.lit) | ret ;   // llt => ret
-        return f;
-    }
+    return ret == _undef_ || c.lit == lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
 }
