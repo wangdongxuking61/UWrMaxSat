@@ -529,9 +529,15 @@ void PbSolver::solve(solve_Command cmd)
     // Solver (optimize):
     //sat_solver.setVerbosity(opt_verbosity);
     sat_solver.verbosity = opt_verbosity;
+    Int goal_gcd;
+    if (goal != NULL) {
+        goal_gcd = (*goal)(0);
+        for (int i = 1; i < goal->size; ++i) goal_gcd = gcd(goal_gcd, (*goal)(i));
+        if (goal_gcd < 0) goal_gcd = -goal_gcd;
+    }
 
     vec<Lit> goal_ps; if (goal != NULL){ for (int i = 0; i < goal->size; i++) goal_ps.push((*goal)[i]); }
-    vec<Int> goal_Cs; if (goal != NULL){ for (int i = 0; i < goal->size; i++) goal_Cs.push((*goal)(i)); }
+    vec<Int> goal_Cs; if (goal != NULL){ for (int i = 0; i < goal->size; i++) goal_Cs.push((*goal)(i)/goal_gcd); }
     assert(best_goalvalue == Int_MAX);
 
     if (opt_polarity_sug != 0){
@@ -561,7 +567,6 @@ void PbSolver::solve(solve_Command cmd)
     signal(SIGXCPU,SIGINT_interrupt);
 
     bool    sat = false;
-    int     assump_litn;
     Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
     Int     LB_goalvalue = 0;
@@ -601,11 +606,11 @@ void PbSolver::solve(solve_Command cmd)
             if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
                 break;
 
-            best_goalvalue = evalGoal(*goal, sat_solver.model);
+            best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
             if (cmd == sc_FirstSolution) break;
 
             if (opt_verbosity >= 1){
-                char* tmp = toString(best_goalvalue);
+                char* tmp = toString(best_goalvalue * goal_gcd);
                 reportf("\bFound solution: %s\b\n", tmp);
                 xfree(tmp); }
             if(opt_minimization == 0 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
@@ -615,7 +620,7 @@ void PbSolver::solve(solve_Command cmd)
             } else {
                 Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
 
-                try_lessthan = LB_goalvalue/opt_bin_coeff + best_goalvalue*(opt_bin_coeff-1)/opt_bin_coeff;
+                try_lessthan = (LB_goalvalue + (best_goalvalue+1)*(opt_bin_coeff-1))/opt_bin_coeff;
 
                 if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
                     break; // unsat
@@ -649,15 +654,15 @@ void PbSolver::solve(solve_Command cmd)
         else if (goal == NULL)
             reportf("\bSATISFIABLE: No goal function specified.\b\n");
         else if (cmd == sc_FirstSolution){
-            char* tmp = toString(best_goalvalue);
+            char* tmp = toString(best_goalvalue * goal_gcd);
             reportf("\bFirst solution found: %s\b\n", tmp);
             xfree(tmp);
         }else if (asynch_interrupt){
-            char* tmp = toString(best_goalvalue);
+            char* tmp = toString(best_goalvalue * goal_gcd);
             reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
             xfree(tmp);
        }else{
-            char* tmp = toString(best_goalvalue);
+            char* tmp = toString(best_goalvalue * goal_gcd);
             reportf("\bOptimal solution: %s\b\n", tmp);
             xfree(tmp);
         }
