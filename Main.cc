@@ -58,7 +58,7 @@ int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 
 int      opt_minimization  = 0; // 0 = sequential. 1 = alternating
-int      opt_seq_thres     = 12;
+int      opt_seq_thres     = 96;
 int      opt_bin_coeff    = 3;
 
 char*    opt_input  = NULL;
