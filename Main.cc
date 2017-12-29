@@ -57,8 +57,13 @@ int      opt_sort_alg      = 1;
 int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 
+int      opt_minimization  = 0; // 0 = sequential. 1 = alternating
+int      opt_seq_thres     = 96;
+int      opt_bin_coeff    = 3;
+
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
+
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -87,6 +92,7 @@ cchar* doc =
     "\n"
     "  -p -pbvars    Restrict decision heuristic of SAT to original PB variables.\n"
     "  -ps{+,-,0}    Polarity suggestion in SAT towards/away from goal (or neutral).\n"
+    "  -alt          Alternative search for minimization.\n"
     "\n"
     "Input options:\n"
     "  -of -old-fmt  Use old variant of OPB file format.\n"
@@ -159,6 +165,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "ps+"       )) opt_polarity_sug = +1;
             else if (oneof(arg, "ps-"       )) opt_polarity_sug = -1;
             else if (oneof(arg, "ps0"       )) opt_polarity_sug =  0;
+            else if (oneof(arg, "alt"       )) opt_minimization =  1;
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
 
@@ -338,6 +345,7 @@ int main(int argc, char** argv)
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     parse_PB_file(opt_input, *pb_solver, opt_old_format);
+
     pb_solver->solve(convert(opt_command));
 
     if (pb_solver->goal == NULL && pb_solver->best_goalvalue != Int_MAX)

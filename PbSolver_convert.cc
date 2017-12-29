@@ -29,28 +29,29 @@ Formula convertToBdd   (const Linear& c, int max_cost = INT_MAX);   // From: PbS
 
 bool PbSolver::convertPbs(bool first_call)
 {
-    vec<Formula>    converted_constrs;
+  vec<Formula>    converted_constrs;
 
-    if (first_call){
-        findIntervals();
-        if (!rewriteAlmostClauses()){
-            sat_solver.addEmptyClause();
-            return false; }
+  if (first_call){
+    findIntervals();
+    if (!rewriteAlmostClauses()) {
+      sat_solver.addEmptyClause();
+      return false;
     }
+  }
 
-    for (int i = 0; i < constrs.size(); i++){
-        if (constrs[i] == NULL) continue;
-        Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
+  for (int i = 0; i < constrs.size(); i++) {
+    if (constrs[i] == NULL) continue;
+    Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
 
-        if (opt_verbosity >= 1)
-            /**/reportf("---[%4d]---> ", constrs.size() - 1 - i);
-	try { // M. Piotrow 11.10.2017
+    if (opt_verbosity >= 1) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i);
+    
+    try { // M. Piotrow 11.10.2017
         if (opt_convert == ct_Sorters) {
             // converted_constrs.push(buildConstraint(c));
-	  int adder_cost = estimatedAdderCost(c);
-	  Int max_coeff = c(c.size-1);
-	  int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
-	  double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
+	    int adder_cost = estimatedAdderCost(c);
+	    Int max_coeff = c(c.size-1);
+	    int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
+	    double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
             Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * add_sort_factor));
             if (result == _undef_)
                 result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
@@ -75,16 +76,18 @@ bool PbSolver::convertPbs(bool first_call)
                 converted_constrs.push(result);
         }else
             assert(false);
-	} catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
-	   FEnv::clear(); i=-1;
-	   if (opt_convert != ct_Adders) { opt_convert = ct_Adders; continue; }
-	   else {
-	     reportf("Out of memery in converting constraints: %s\n",ba.what());
-	     exit(1); //throw(std::bad_alloc);
-	   }
-	}
-        if (!okay()) return false;
+    } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
+	  FEnv::clear(); i=-1;
+	  if (opt_convert != ct_Adders) {
+              opt_convert = ct_Adders;
+              continue;
+          } else {
+	      reportf("Out of memery in converting constraints: %s\n",ba.what());
+	      exit(1); //throw(std::bad_alloc);
+	  }
     }
+    if (!okay()) return false;
+  }
 
     // NOTE: probably still leaks memory (if there are constraints that are NULL'ed elsewhere)
     for (int i = 0; i < constrs.size(); i++)

@@ -30,7 +30,6 @@ void nothing(void) {}
 
 //=================================================================================================
 
-
 //#define PickSmallest
 #define ExpensiveBigConstants
 #define AllDigitsImportant
@@ -446,5 +445,6 @@ Formula buildConstraint(const Linear& c, int max_cost)
     }
     lastCost = FEnv::topSize(), lastRet = ret;
     FEnv::keep();
-    return ret;
+
+    return c.lit==lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
 }

@@ -9,3 +9,8 @@ minisat+_bignum_static
 minisatp-*
 *.un~
 cominisatp-*
+normalized-*
+minisatp
+tests/*
+build/*
+PB16.pdf

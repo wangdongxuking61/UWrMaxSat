@@ -46,12 +46,13 @@ class Linear {
 public:
     int     size;       // Terms in constraint.
     Int     lo, hi;     // Sum should be in interval [lo,hi] (inclusive).
+    Lit     lit;        // Literal implies constraint (lit_Undef for normal case).
 private:
     char    data[0];    // (must be last element of the struct)
 public:
     // NOTE: Cannot be used by normal 'new' operator!
-    Linear(const vec<Lit>& ps, const vec<Int>& Cs, Int low, Int high) {
-        orig_size = size = ps.size(), lo = low, hi = high;
+    Linear(const vec<Lit>& ps, const vec<Int>& Cs, Int low, Int high, Lit ll) {
+        orig_size = size = ps.size(), lo = low, hi = high; lit = ll;
         char* p = data;
         for (int i = 0; i < ps.size(); i++) *(Lit*)p = ps[i], p += sizeof(Lit);
         for (int i = 0; i < Cs.size(); i++) new ((Int*)p) Int(Cs[i]), p += sizeof(Int); }
@@ -102,8 +103,8 @@ protected:
         tmp_clause.clear(); for (int i = 0; i < ps.size(); i++) tmp_clause.push(ps[i]);
         return sat_solver.addClause_(tmp_clause); }
         
-    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C);
-    void    storePb    (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi);
+    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
+    void    storePb   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
     void    findIntervals();
     bool    rewriteAlmostClauses();
@@ -152,7 +153,7 @@ public:
     int     getVar      (cchar* name);
     void    allocConstrs(int n_vars, int n_constrs);
     void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
-    bool    addConstr   (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq);
+    bool    addConstr  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
 
     // Solve:
     //

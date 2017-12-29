@@ -48,6 +48,9 @@ extern Command  opt_command;
 extern bool     opt_branch_pbvars;
 extern int      opt_polarity_sug;
 extern int      opt_sort_alg;
+extern int      opt_minimization;
+extern int      opt_seq_thres;
+extern int      opt_bin_coeff;
 
 // -- files:
 extern char*    opt_input;
