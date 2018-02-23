@@ -30,7 +30,7 @@ macro Formula operator && (Formula f, Formula g)
     else if (f == ~g )             return _0_;
 
     if (g < f) swp(f, g);
-    return Bin_new(op_And, f, g);
+    return opt_shared_fmls ? Bin_newS(op_And, f, g) : Bin_new(op_And, f, g);
 }
 
 macro Formula operator || (Formula f, Formula g) {
@@ -108,6 +108,7 @@ static void oldOddEvenSort(vec<Formula>& fs)
 
 
 void oddEvenSort(vec<Formula>& vars, int max_sel, int ineq);
+void merge(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq);
 
 static inline bool preferDirectMerge(unsigned n, unsigned k);
 static inline void sort2(Formula& a, Formula& b); // comparator
@@ -125,7 +126,8 @@ static void OddEvenMerge(const vec<Formula>& in1,  const vec<Formula>& in2,
                     vec<Formula>& outvars, unsigned k);
 
 static void modifiedOddEvenSort(vec<Formula>& vars, int ineq);
-static void columnSort(vec<Formula>& vars, int ineq);
+static void bottomup4OddEvenSort(vec<Formula>& vars, int ineq);                                              
+//static void columnSort(vec<Formula>& vars, int ineq);
 //static bool directOddEvenSelect(const vec<Formula>& invars, vec<Formula>& outvars, 
 //                    unsigned k, int ineq);
 
@@ -137,7 +139,7 @@ static void OddEven4Merge(vec<Formula> const& a, vec<Formula> const& b, vec<Form
 
 void oddEvenSort(vec<Formula>& vars, int max_sel, int ineq)
 {
-    int k = max_sel < 0 || max_sel >= vars.size() ? vars.size() : max_sel;
+    int k = opt_shared_fmls || max_sel < 0 || max_sel >= vars.size() ? vars.size() : max_sel;
     switch (opt_sort_alg) {
         case 1: oldOddEvenSort(vars); break;
         case 3: //columnSort(vars, ineq); break;
@@ -150,8 +152,18 @@ void oddEvenSort(vec<Formula>& vars, int max_sel, int ineq)
         }*/
         case 2: OddEvenSelect(vars, k, ineq);  break;
         case 4: OddEven4Select(vars, k, ineq); break;
-    }  
+        case 5: bottomup4OddEvenSort(vars, ineq); break;                                                     }  
     
+}
+
+void merge(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq)
+{
+    int n = in1.size() + in2.size();
+
+    if (ineq != 0 && opt_sort_alg != 1 && preferDirectMerge(n,k))
+        DirectMerge(in1, in2, outvars, k, ineq);
+    else
+        OddEvenMerge(in1, in2, outvars, k);
 }
 
 static inline unsigned pow2roundup (unsigned x) {
@@ -233,27 +245,27 @@ static void DirectSort(vec<Formula>& vars, unsigned k, int ineq) {
 }
 
 static void DirectMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<Formula>& outvars, unsigned k, int ineq) {
-  // k is the desired size of sorted output; 1s (if ineq < ) or 0s (else will be propagated from inputs to outputs.
+  // k is the desired size of sorted output; 1s (if ineq < ) or 0s (else) will be propagated from inputs to outputs.
   assert(outvars.size() == 0);
   
-  unsigned n = in1.size(), m = in2.size(), c = min(n+m,k), a = min(n,c), b = min(m,c);
+  int n = in1.size(), m = in2.size(), c = min(n+m,(int)k), a = min(n,c), b = min(m,c);
 
   if (b == 0)
-    for (unsigned i=0 ; i < c ; i++) outvars.push(in1[i]);
+    for (int i=0 ; i < c ; i++) outvars.push(in1[i]);
   else if (a == 0)
-    for (unsigned i=0 ; i < c ; i++) outvars.push(in2[i]);
+    for (int i=0 ; i < c ; i++) outvars.push(in2[i]);
   else if (ineq < 0) {
-    for (unsigned i=0 ; i < c ; i++) outvars.push(_0_);
-    for (unsigned i=0 ; i < a ; i++) outvars[i] |= in1[i];
-    for (unsigned i=0 ; i < b ; i++) outvars[i] |= in2[i];
-    for (unsigned j=0 ; j < b ; j++)
-      for(unsigned i=0 ; i < min(a,c-j-1) ; i++) outvars[i+j+1] |= in1[i] && in2[j];
+    for (int i=0 ; i < c ; i++) outvars.push(_0_);
+    for (int i=0 ; i < a ; i++) outvars[i] |= in1[i];
+    for (int i=0 ; i < b ; i++) outvars[i] |= in2[i];
+    for (int j=0 ; j < b ; j++)
+      for(int i=0 ; i < min(a,c-j-1) ; i++) outvars[i+j+1] |= in1[i] && in2[j];
   } else {
-    for (unsigned i=0 ; i < c ; i++) outvars.push(_1_);
-    for (unsigned i=0 ; i < min(a,c-m) ; i++) outvars[i+m] &= in1[i];
-    for (unsigned i=0 ; i < min(b,c-n) ; i++) outvars[i+n] &= in2[i];
-    for (unsigned j=0 ; j < b ; j++)
-      for(unsigned i=0 ; i < min(a,c-j) ; i++) outvars[i+j] &= in1[i] || in2[j];
+    for (int i=0 ; i < c ; i++) outvars.push(_1_);
+    for (int i=0 ; i < min(a,c-m) ; i++) outvars[i+m] &= in1[i];
+    for (int i=0 ; i < min(b,c-n) ; i++) outvars[i+n] &= in2[i];
+    for (int j=0 ; j < b ; j++)
+      for(int i=0 ; i < min(a,c-j) ; i++) outvars[i+j] &= in1[i] || in2[j];
   }
 }
 
@@ -317,7 +329,7 @@ static void OddEvenCombine(const vec<Formula>& in1, const vec<Formula>& in2, vec
         else             outvars.push(in1[k/2]);
 }
     
-static void OddEvenMerge(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k) {
+void OddEvenMerge(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k) {
     unsigned a = in1.size(), b = in2.size();
     
     if (a+b < k) k = a+b;
@@ -506,7 +518,7 @@ static void modifiedOddEvenMerge(vec<Formula>& fs, int begin, int end, int ineq)
     if (n <= 4) {
         for (int i = 0; i < n; i++) tmp.push(fs[begin+i]);
         DirectSort(tmp, n, ineq);
-    } else if (n <= 128) {
+    } else if (n <= 16) {
         vec<Formula> tmp1, tmp2;
         for (int i = 0; i < mid; i++) tmp1.push(fs[i + begin]);
         for (int i = mid; i < n; i++) tmp2.push(fs[i + begin]);
@@ -529,12 +541,79 @@ static void modifiedOddEvenMerge(vec<Formula>& fs, int begin, int end, int ineq)
 static void modifiedOddEvenSort(vec<Formula>& fs, int ineq)
 {
     int orig_sz = fs.size();
+
+    if (orig_sz <= 5) {
+        DirectSort(fs, orig_sz, ineq);
+        return;
+    }
     int sz; for (sz = 1; sz < fs.size(); sz *= 2);
     fs.growTo(sz,_0_);
 
-    for (int i = 1; i < fs.size(); i *= 2)
+    for (int i = 2; i < fs.size(); i *= 2)
         for (int j = 0; j + 2*i <= fs.size(); j += 2*i)
             modifiedOddEvenMerge(fs, j, j+2*i, ineq);
+    fs.shrink(sz - orig_sz); 
+}
+
+static void bottomup4OddEvenMerge(vec<Formula>& fs, int begin, int step, int length, int ineq)
+{
+    int n = length;
+    assert(n >= 4);
+  
+    if (n == 4) {
+        vec<Formula> tmp(n);
+        for (int i = 0; i < n; i++) tmp[i] = fs[begin+i*step];
+        DirectSort(tmp, n, ineq);
+        for (int i = 0; i < n; i++) fs[begin+i*step] = tmp[i];
+        //sort2(fs[begin],fs[begin+1*step]); sort2(fs[begin+2*step],fs[begin+3*step]);
+        //sort2(fs[begin],fs[begin+2*step]); sort2(fs[begin+1*step],fs[begin+3*step]);
+        //sort2(fs[begin+1*step],fs[begin+2*step]);
+    } else {
+        bottomup4OddEvenMerge(fs, begin,      step*2, n/2, ineq);
+        bottomup4OddEvenMerge(fs, begin+step, step*2, n/2, ineq);
+        for (int i = 1, j=begin+step; i < n - 3; i += 2,j+=2*step)
+            sort2(fs[j],fs[j+3*step]);
+        for (int i = 1, j=begin+step; i < n - 1; i += 2,j+=2*step)
+            sort2(fs[j],fs[j+step]);
+    }
+}
+
+// Inputs to the circuit is the formulas in fs, which is overwritten
+// by the resulting outputs of the circuit.
+// NOTE: The number of comparisons is bounded by: n * log n * (log n + 1)
+
+static void bottomup4OddEvenSort(vec<Formula>& fs, int ineq)
+{  
+    int orig_sz = fs.size();
+
+    if (orig_sz <= 5) {
+        DirectSort(fs, orig_sz, ineq);
+        return;
+    }
+
+    int init_sz = 4, sz = init_sz, log_sz = 2 ; while (sz < orig_sz) sz *= 2, ++log_sz;
+    fs.growTo(sz,_0_);
+    vec<Formula> tmp;
+
+    for (int j = 0; j + init_sz <= fs.size(); j += init_sz) {
+        vec<Formula> tmp(init_sz);
+        for (int i = 0; i < init_sz; i++) tmp[i] = fs[j+i];
+        DirectSort(tmp, init_sz, ineq);
+        for (int i = 0; i < init_sz; i++) fs[j+i] = tmp[i];
+    }
+    if (log_sz %2 == 1) {
+        for (int j = 0; j + 2*init_sz <= fs.size(); j += 2*init_sz) {
+            vec<Formula> tmp1(init_sz), tmp2(init_sz), tmp; 
+            for (int i = 0; i < init_sz; i++)  tmp1[i] = fs[j+i], tmp2[i] = fs[j+init_sz+i];
+            DirectMerge(tmp1, tmp2, tmp, 2*init_sz, ineq);
+            for (int i = 0; i < 2*init_sz; i++) fs[j+i] = tmp[i];
+        }
+        init_sz *= 2;
+    }
+
+    for (int i = init_sz; i < fs.size(); i *= 4)
+        for (int j = 0; j + 4*i <= fs.size(); j += 4*i)
+            bottomup4OddEvenMerge(fs, j, 1, 4*i, ineq);
     fs.shrink(sz - orig_sz); 
 }
 
@@ -824,7 +903,6 @@ static void dirDirectMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<
     }
   }
 }
-#endif
 
 static void rangeOddEvenSort(vec<Formula>& fs, int begin, int end, int ineq)
 {
@@ -881,3 +959,5 @@ static void columnSort(vec<Formula>& fs, int ineq)
         fs.shrink(n - orig_sz);
     }
 }
+#endif
+

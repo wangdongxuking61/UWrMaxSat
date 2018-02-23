@@ -53,11 +53,14 @@ Command  opt_command       = cmd_Minimize;
 bool     opt_branch_pbvars = false;
 int      opt_polarity_sug  = 1;
 bool     opt_old_format    = false;
-int      opt_sort_alg      = 1;
+int      opt_sort_alg      = 4;
+int      opt_sort_alg2     = 1;
+bool     opt_shared_fmls   = false;
+int      opt_base_max      = 17;
 int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 
-int      opt_minimization  = 0; // 0 = sequential. 1 = alternating
+int      opt_minimization  = 2; // 0 = sequential. 1 = alternating, 2 - binary
 int      opt_seq_thres     = 96;
 int      opt_bin_coeff    = 3;
 
@@ -85,6 +88,7 @@ cchar* doc =
     "  -bdd-thres=   Threshold for prefering BDDs in mixed mode.        [def: %g]\n"
     "  -sort-thres=  Threshold for prefering sorters. Tried after BDDs. [def: %g]\n"
     "  -goal-bias=   Bias goal function convertion towards sorters.     [def: %g]\n"
+    "  -base-max=    Maximal number (<= 17) to be used in sorter base.  [def: %d]\n"
     "\n"
     "  -1 -first     Don\'t minimize, just give first solution found\n"
     "  -A -all       Don\'t minimize, give all solutions\n"
@@ -93,6 +97,7 @@ cchar* doc =
     "  -p -pbvars    Restrict decision heuristic of SAT to original PB variables.\n"
     "  -ps{+,-,0}    Polarity suggestion in SAT towards/away from goal (or neutral).\n"
     "  -alt          Alternative search for minimization.\n"
+    "  -seq          Sequential search for minimization.\n"
     "\n"
     "Input options:\n"
     "  -of -old-fmt  Use old variant of OPB file format.\n"
@@ -135,7 +140,7 @@ void parseOptions(int argc, char** argv)
     for (int i = 1; i < argc; i++){
         char*   arg = argv[i];
         if (arg[0] == '-'){
-            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias), exit(0);
+            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max), exit(0);
 
             else if (oneof(arg, "ca,adders" )) opt_convert = ct_Adders;
             else if (oneof(arg, "cs,sorters")) opt_convert = ct_Sorters;
@@ -156,6 +161,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-goal-bias=",  11) == 0) opt_goal_bias  = atof(arg+11);
             else if (strncmp(arg, "-goal="     ,   6) == 0) opt_goal       = atoi(arg+ 6);  // <<== real bignum parsing here
             else if (strncmp(arg, "-cnf="      ,   5) == 0) opt_cnf        = arg + 5;
+            else if (strncmp(arg, "-base-max=",   10) == 0) opt_base_max   = atoi(arg+10); 
             //(end)
 
             else if (oneof(arg, "1,first"   )) opt_command = cmd_FirstSolution;
@@ -165,7 +171,9 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "ps+"       )) opt_polarity_sug = +1;
             else if (oneof(arg, "ps-"       )) opt_polarity_sug = -1;
             else if (oneof(arg, "ps0"       )) opt_polarity_sug =  0;
+            else if (oneof(arg, "seq"       )) opt_minimization =  0;
             else if (oneof(arg, "alt"       )) opt_minimization =  1;
+            else if (oneof(arg, "bin"       )) opt_minimization =  2;
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
 
@@ -175,10 +183,10 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "v0"        )) opt_verbosity = 0;
             else if (oneof(arg, "v1"        )) opt_verbosity = 1;
             else if (oneof(arg, "v2"        )) opt_verbosity = 2;
-            else if (oneof(arg, "s1"        )) opt_sort_alg  = 1;
-            else if (oneof(arg, "s2"        )) opt_sort_alg  = 2;
-            else if (oneof(arg, "s3"        )) opt_sort_alg  = 3;
-            else if (oneof(arg, "s4"        )) opt_sort_alg  = 4;
+            else if (strncmp(arg, "-sa", 3 ) == 0) {
+                if (arg[3] >= '1' && arg[3] <= '5') opt_sort_alg = arg[3]-'0';
+                if (arg[3] != '\0' && arg[4] >= '1' && arg[4] <= '5') opt_sort_alg2 = arg[4]-'0';
+            }
             else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
             else
@@ -340,6 +348,7 @@ int main(int argc, char** argv)
         reportf("Setting memory limit to %dMB.\n",opt_mem_lim);
         signal(SIGSEGV, SIGTERM_handler); 
         signal(ENOMEM, SIGTERM_handler); 
+        signal(SIGABRT, SIGTERM_handler);
         Minisat::limitMemory(opt_mem_lim);
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017

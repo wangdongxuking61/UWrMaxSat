@@ -35,6 +35,7 @@ Contains types, macros, and inline functions generally useful in a C++ program.
 #include <cfloat>
 #include <new>
 
+#include <map>
 
 //=================================================================================================
 // Basic Types & Minor Things:
@@ -224,6 +225,39 @@ inline bool operator < (const Pair<Fst, Snd>& x, const Pair<Fst, Snd>& y) {
 template <class Fst, class Snd>
 inline Pair<Fst, Snd> Pair_new(const Fst& x, const Snd& y) {
     return Pair<Fst, Snd>(x, y); }
+
+//=================================================================================================
+// 'Interval':
+
+template <class Data>
+struct Interval {
+
+  Data  fst, snd;
+
+  Interval(void) { }
+  Interval(const Data& x, const Data& y) : fst(x), snd(y) { }
+
+  template <class Compat>
+  Interval(const Interval<Compat>& p) : fst(p.fst), snd(p.snd) { }
+
+  void split(Data& out_fst, Data& out_snd) { out_fst = fst; out_snd = snd; }
+};
+
+//    uint hash() const {return fst.hash() ^ snd.hash(); }
+
+// defined by overlapping
+template <class Data>
+inline bool operator == (const Interval<Data>& x, const Interval<Data>& y) {
+      return !((x.snd < y.fst) || (y.snd < x.fst )); }
+
+template <class Data>
+inline bool operator < (const Interval<Data>& x, const Interval<Data>& y) {
+      return x.snd < y.fst; }
+
+template <class Data>
+inline Interval<Data> Interval_new(const Data& x, const Data& y) {
+  return Interval<Data>(x, y); }
+
 
 
 //=================================================================================================

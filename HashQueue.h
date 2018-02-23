@@ -17,7 +17,7 @@ constexpr size_t pbits = log2(elemsof(prime)), pmask = (1 << pbits) - 1;
 
 class HashQueue {
     struct BaseData {
-        long long int base;
+        unsigned long long int base0, base1;
         int cost;
         int carry_ins;
         int index;
@@ -27,24 +27,27 @@ class HashQueue {
         bool operator()(int i, int j) { return (*mapptr)[i]->cost < (*mapptr)[j]->cost ; }
         Comp(vec<BaseData * > *ptr) : mapptr(ptr) { }
     } ;
-    Map<int, BaseData> baseMap;
+    Map<unsigned long long int, BaseData> baseMap;
     vec<BaseData * > mapPtr;
     int lastFree;
     Comp mycmp;
     Heap<Comp> queue;
     static const BaseData nullBase;
-    void unpackBase(long long int base, vec<int>& nbase) {
-        nbase.clear(); while (base & pmask) { nbase.push(prime[(base & pmask) - 1]); base >>= pbits; }
+    void unpackBase(unsigned long long int base0, unsigned long long int base1, vec<int>& nbase) {
+        nbase.clear(); 
+        while (base0 & pmask) { nbase.push(prime[(base0 & pmask) - 1]); base0 >>= pbits; }
+        while (base1 & pmask) { nbase.push(prime[(base1 & pmask) - 1]); base1 >>= pbits; }
     }
-    long long int packBase(const vec<int>& nbase) {
-        long long int base = 0;
-        for (int i=0; i < nbase.size(); i++) 
-            base = (base << pbits) | primeIndex[nbase[i]];
-        return base;
+    void packBase(const vec<int>& nbase, unsigned long long int &base0, unsigned long long int &base1) {
+        base0 = base1 = 0;
+        for (int sz = sizeof(unsigned long long int)*CHAR_BIT, i=0; i < nbase.size(); sz -= pbits, i++) 
+            sz >= (int)pbits ? base0 = (base0 << pbits) | primeIndex[nbase[i]] 
+                             : base1 = (base1 << pbits) | primeIndex[nbase[i]];
     }
-    int hashBase(const vec<int>& nbase) {
-        int count[elemsof(prime)] = {0}, hash = 0;
-        for (int i=0; i < nbase.size(); i++) 
+    unsigned long long int hashBase(const vec<int>& nbase) {
+        int count[elemsof(prime)] = {0};
+        unsigned long long int  hash = 0;
+        for (int i = 0; i < nbase.size(); i++) 
             count[primeIndex[nbase[i]]-1]++;
         for (int i = (int)elemsof(prime) - 1; i >= 0; i--) 
             hash = ((hash << 1) | 1) << count[i];
@@ -62,17 +65,18 @@ public:
         queue.indices[minIndex] = lastFree;
         lastFree = minIndex;
         minPtr->index = -1;
-        unpackBase(minPtr->base, new_base);
+        unpackBase(minPtr->base0, minPtr->base1, new_base);
         carry_ins = minPtr->carry_ins;
         return minPtr->cost;
     }
     void push(const vec<int>& base, int cost, int carry_ins) {
-        int hash = hashBase(base);
-        long long int pbase = packBase(base);
+        unsigned long long int pbase0, pbase1, hash = hashBase(base); 
+        packBase(base, pbase0, pbase1);
         BaseData &data = baseMap.ref(hash);
         if (cost < data.cost) {
-            data.base = pbase;
-            data.cost = cost;
+            data.base0 = pbase0;
+            data.base1 = pbase1;
+            data.cost  = cost;
             data.carry_ins = carry_ins;
             if (data.index == -1) {
                 int new_index;
@@ -88,9 +92,9 @@ public:
     }
 };
 
-const int HashQueue::maxBaseSize = sizeof(long long int)*CHAR_BIT / pbits;
+const int HashQueue::maxBaseSize = 2 * sizeof(unsigned long long int) * CHAR_BIT / pbits;
 
-const HashQueue::BaseData HashQueue::nullBase = {0, INT_MAX, 0, -1};
+const HashQueue::BaseData HashQueue::nullBase = {0, 0, INT_MAX, 0, -1};
 /*vec<HashQueue::BaseData *> HashQueue::mapPtr;
 
 static bool cmp(int left, int right) {

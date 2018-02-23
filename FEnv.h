@@ -93,7 +93,12 @@ namespace ENV {
 #define tag_ITE  1
 #define tag_FA   2
 
+#define dtag_ITE  0 
+#define dtag_ITEn 1   // reverse monotonice IfThenElse
+#define dtag_ITEp 2   // monotonic IfThenElse
+
 macro int ctag(FML f    ) { return (int)(ENV::nodes[index(f)].data0 & 3); }
+macro int dtag(FML f    ) { return (int)(ENV::nodes[index(f)].data1 & 3); }
 macro int ctag(int index) { return (int)(ENV::nodes[index   ].data0 & 3); }
 macro int tag (FML f    ) { return compo(f) ? ctag(f) : tag_Atom; }
 
@@ -101,6 +106,8 @@ macro bool Atom_p(FML f) { return !compo(f); }
 macro bool Bin_p (FML f) { return tag(f) == tag_Bin; }
 macro bool ITE_p (FML f) { return tag(f) == tag_ITE; }
 macro bool FA_p  (FML f) { return tag(f) == tag_FA; }
+macro bool ITEn_p (FML f) { return tag(f) == tag_ITE && dtag(f) == dtag_ITEn; }
+macro bool ITEp_p (FML f) { return tag(f) == tag_ITE && dtag(f) == dtag_ITEp; }
 
 //-------------------------------------------------------------------------------------------------
 
@@ -133,6 +140,24 @@ macro ENV::NodeData ITE_newData(FML cond, FML tt, FML ff) {
     assert(((unsigned)ff & 0x3) == 0);
   #endif
     return ENV::NodeData(tag_ITE | (unsigned)cond, (unsigned)tt, (unsigned)ff);
+}
+
+macro ENV::NodeData ITEn_newData(FML cond, FML tt, FML ff) {
+  #ifdef PARANOID
+    assert(((unsigned)cond & 0x3) == 0);
+    assert(((unsigned)tt & 0x3) == 0);
+    assert(((unsigned)ff & 0x3) == 0);
+  #endif
+    return ENV::NodeData(tag_ITE | (unsigned)cond, dtag_ITEn | (unsigned)tt, (unsigned)ff);
+}
+
+macro ENV::NodeData ITEp_newData(FML cond, FML tt, FML ff) {
+  #ifdef PARANOID
+    assert(((unsigned)cond & 0x3) == 0);
+    assert(((unsigned)tt & 0x3) == 0);
+    assert(((unsigned)ff & 0x3) == 0);
+  #endif
+    return ENV::NodeData(tag_ITE | (unsigned)cond, dtag_ITEp | (unsigned)tt, (unsigned)ff);
 }
 
 macro ENV::NodeData FA_newData(bool isCarry, FML FA_x, FML FA_y, FML FA_c) {
@@ -169,6 +194,16 @@ macro FML ITE_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = f
     return sharing ? ENV::newS_helper(ITE_newData(cond, tt, ff), sign)
                    : ENV::new_helper (ITE_newData(cond, tt, ff), sign); }
 macro FML ITE_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITE_new(cond, tt, ff, sign, true); }
+
+macro FML ITEn_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = false) {
+    return sharing ? ENV::newS_helper(ITEn_newData(cond, tt, ff), sign)
+                   : ENV::new_helper (ITEn_newData(cond, tt, ff), sign); }
+macro FML ITEn_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITEn_new(cond, tt, ff, sign, true); }
+
+macro FML ITEp_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = false) {
+    return sharing ? ENV::newS_helper(ITEp_newData(cond, tt, ff), sign)
+                   : ENV::new_helper (ITEp_newData(cond, tt, ff), sign); }
+macro FML ITEp_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITEp_new(cond, tt, ff, sign, true); }
 
 macro FML FA_new (bool isCarry, FML FA_x, FML FA_y, FML FA_c, bool sign = false, bool sharing = false) {
     return sharing ? ENV::newS_helper(FA_newData(isCarry, FA_x, FA_y, FA_c), sign)
@@ -322,7 +357,7 @@ macro Formula FAc(Formula x, Formula y, Formula c)      // x + y + c >= 2
 }
 
 
-macro Formula ITE(Formula c, Formula t, Formula f)
+macro Formula ITE(Formula c, Formula t, Formula f, bool p = false)
 {
     if (c == _0_) return f;
     if (c == _1_) return t;
@@ -333,12 +368,20 @@ macro Formula ITE(Formula c, Formula t, Formula f)
     if (f == _0_ || f ==  c) return  c & t;
     if (f == _1_ || f == ~c) return ~c | t;
 
+    if(p) {
+      if(sign(c)) return ITEp_newS(~c, ~f, ~t, true);
+      else        return ITEp_newS(c, t, f);
+    }
+
     if (t < f)
         swp(t, f),
         c = ~c;
 
     return ITE_newS(c, id(t,sign(f)), unsign(f), sign(f));
 }
+
+macro Formula ITEp(Formula c, Formula t, Formula f) { return ITE(c, t, f, true); }
+macro Formula ITEn(Formula c, Formula t, Formula f) { return ITE(~c, f, t, true); }
 
 //-------------------------------------------------------------------------------------------------
 

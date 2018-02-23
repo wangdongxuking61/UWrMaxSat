@@ -50,6 +50,7 @@ struct Exception_IntOverflow {
 //
 class Int {
     int64   data;
+    bool small() const { return (Int_Min__ < data && data < Int_Max__) ; }
 public:
     Int() : data(Int_Undef__) {}
     Int(int   x) : data(x) {}
@@ -80,6 +81,14 @@ public:
     Int  operator *  (Int other) const {A2 return Int(data * other.data); }
     Int  operator /  (Int other) const {A2 return Int(data / other.data); }
     Int  operator %  (Int other) const {A2 return Int(data % other.data); }
+
+    // addition that allowed infinity (not allowed as 2nd parameter)
+    Int add(Int other) const {
+      if(!small())
+    return *this;
+      else 
+    return Int(data + other.data);
+    }
 
     friend char* toString(Int num) { char buf[32]; sprintf(buf, "%lld", num.data); return xstrdup(buf); }   // Caller must free string.
     friend int   toint   (Int num) { if (num > INT_MAX || num < INT_MIN) throw Exception_IntOverflow(xstrdup("toint")); return (int)num.data; }
@@ -223,6 +232,19 @@ public:
     // -- Bit operators (incomplete; we don't need more at the moment)
     Int  operator & (const Int& other) const {A2  Int ret; mpz_and(*ret.data, *data, *other.data); return ret; }
     Int& operator >>= (int n) {A1  mpz_fdiv_q_2exp(*data, *data, n); return *this; }
+
+
+// addition that allowed infinity (not allowed as 2nd parameter)
+    Int add(const Int& other) const {
+      if(small())
+        return *this;
+      else {
+        Int ret;
+        mpz_add(*ret.data, *data, *other.data);
+        return ret;
+      }
+    }
+
 
     // Methods:
     //

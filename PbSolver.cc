@@ -550,7 +550,8 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_convert_goal != ct_Undef)
         opt_convert = opt_convert_goal;
     opt_sort_thres *= opt_goal_bias;
-    opt_sort_alg = 1;  // OddEvenSort - M. Piotrow 20.07.2017
+    opt_sort_alg = opt_sort_alg2;  // OddEvenSort by default - M. Piotrow 19.02.2018
+    opt_shared_fmls = true;
 
     if (opt_goal != Int_MAX)
         addConstr(goal_ps, goal_Cs, opt_goal, -1, lit_Undef),
@@ -637,11 +638,21 @@ void PbSolver::solve(solve_Command cmd)
         addUnit(~(assump_ps[0]));
         assump_ps.clear();
         LB_goalvalue = try_lessthan;
-        try_lessthan = best_goalvalue;
 
-        if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
-            break;  // unsat
-          
+	if(opt_minimization != 2 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
+	  try_lessthan = best_goalvalue;
+	  if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
+	    break;
+	} else {
+	  Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+
+	  try_lessthan = (LB_goalvalue + (best_goalvalue+1)*(opt_bin_coeff-1))/opt_bin_coeff;
+
+	  if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
+	    break; // unsat
+
+	  assump_ps.push(assump_lit);
+	} 
         convertPbs(false);
       }         
     } // END OF LOOP
