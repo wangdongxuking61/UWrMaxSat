@@ -68,6 +68,10 @@ char*    opt_input  = NULL;
 char*    opt_result = NULL;
 
 
+// -- statistics;
+unsigned long long int srtEncodings = 0, addEncodings = 0, bddEncodings = 0;
+unsigned long long int srtOptEncodings = 0, addOptEncodings = 0, bddOptEncodings = 0;
+
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 cchar* doc =

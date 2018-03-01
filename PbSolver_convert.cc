@@ -47,11 +47,11 @@ bool PbSolver::convertPbs(bool first_call)
     
         try { // M. Piotrow 11.10.2017
             if (opt_convert == ct_Sorters)
-                converted_constrs.push(buildConstraint(c));
+                converted_constrs.push(buildConstraint(c)), first_call ? ++srtEncodings : ++srtOptEncodings;
             else if (opt_convert == ct_Adders)
-                linearAddition(c, converted_constrs);
+                linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
             else if (opt_convert == ct_BDDs)
-                converted_constrs.push(convertToBdd(c));
+                converted_constrs.push(convertToBdd(c)), first_call ? ++bddEncodings : ++bddOptEncodings;
             else if (opt_convert == ct_Mixed) {
                 int adder_cost = estimatedAdderCost(c);
                 int different_cs = 1; for (int i = 1; i < c.size; i++) if (c(i) != c(i-1)) different_cs++;
@@ -61,17 +61,20 @@ bool PbSolver::convertPbs(bool first_call)
   	            int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
                     double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
                     Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * add_sort_factor));
-                    if (result == _undef_) result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
-                    else if (!first_call) opt_convert = ct_Sorters;
-                    if (result == _undef_) linearAddition(c, converted_constrs);
+                    if (result == _undef_) {
+                        result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
+                        if (result != _undef_) first_call ? ++bddEncodings : ++bddOptEncodings;
+                    } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
+                    if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
                     else converted_constrs.push(result);
                 } else {
                     Formula result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
                     if (result == _undef_) {
                         result = buildConstraint(c, (int)(adder_cost * opt_sort_thres));
-                        if (result != _undef_ && !first_call) opt_convert = ct_Sorters; 
-                    } else if (!first_call) opt_convert = ct_BDDs;
-                    if (result == _undef_) linearAddition(c, converted_constrs);
+                        if (result != _undef_)
+                            if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings; 
+                    } else if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings;
+                    if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
                     else converted_constrs.push(result);
                 }
             } else assert(false);

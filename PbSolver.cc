@@ -691,4 +691,6 @@ void PbSolver::printStats()
     printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
     if (mem_used != 0) printf("c Memory used           : %.2f MB\n", mem_used);
     printf("c CPU time              : %g s\n", cpu_time);
+    printf("c Sorter/BDD/Adders     : %llu %llu %llu\n", srtEncodings, bddEncodings, addEncodings);
+    printf("c Sorter/BDD/Adders(OPT): %llu %llu %llu\n", srtOptEncodings, bddOptEncodings, addOptEncodings);
 }

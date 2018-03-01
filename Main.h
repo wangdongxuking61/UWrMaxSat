@@ -58,6 +58,10 @@ extern int      opt_bin_coeff;
 extern char*    opt_input;
 extern char*    opt_result;
 
+// -- statistics;
+extern unsigned long long int srtEncodings, addEncodings, bddEncodings;
+extern unsigned long long int srtOptEncodings, addOptEncodings, bddOptEncodings;
+ 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void reportf(const char* format, ...);      // 'printf()' replacer -- will put "c " first at each line if 'opt_satlive' is TRUE.

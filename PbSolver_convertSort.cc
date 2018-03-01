@@ -58,6 +58,27 @@ static inline int finalCost(vec<Int>& seq, int cost)
     return final_cost;
 }
 
+/*static
+int totalCost(vec<Int>& seq, vec<int>& base)
+{
+    vec<Int> s; seq.copyTo(s);
+    int cost = 0, carry = 0;
+
+    for (int i = 0; i < base.size(); i++){
+        int p    = base[i];
+        int last = 0, rest = carry;   // Sum of all the remainders.
+        Int div;
+
+        for (int j = 0; j < s.size(); j++){
+            rest += toint(s[j] % Int(p));
+            div = s[j] / Int(p);
+            if (div > 0) s[last++] = div;
+        }
+        s.shrink(s.size()-last); cost += rest; carry = rest/p;
+    }
+    return finalCost(s, cost);
+}*/
+
 static
 void optimizeBase(vec<Int>& seq, int carry_ins,int cost, vec<int>& base, int& cost_bestfound, vec<int>& base_bestfound,
     HashQueue *Q)
@@ -237,6 +258,7 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
   vec<Formula> carry;
   vec<Formula> last_digit;
   Formula ret = _1_;
+  //bool shared_fmls = opt_shared_fmls;
   
   Int B = 1, csum = 0;
   for (int i=0; i < base.size(); i++) B *= Int(base[i]);
@@ -246,6 +268,7 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
     int lo_val = toint(lo / B);
 
     if(rem != 0) lo_val++, ps.push(_1_), Cs.push(B-rem);
+    //if (hi != INT_MAX) opt_shared_fmls = true;
 
     buildConstraint(ps, Cs, carry, base, 0, last_digit, max_cost, lo_val, 1);
 
@@ -270,7 +293,7 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
     
     ret &= ~last_digit[hi_val-1];
   }
-
+  //opt_shared_fmls = shared_fmls;
   return ret;
 }
 
@@ -314,12 +337,11 @@ Formula buildConstraint(const Linear& c, int max_cost)
     }
     int      cost;
     static vec<int> base;
-    if (!lastBaseOK || /*lastRet == _undef_ &&*/ sizesDiff > 0) {
+    if (!lastBaseOK || sizesDiff > 0 && (base.size() <= 8 || sizesDiff * 8 > c.size)) {
         optimizeBase(Cs, cost, base);
         /**/pf("cost=%d, base.size=%d\n", cost, base.size());
-    } else if (lastRet == _undef_) {
-        if (lastCost > max_cost) return _undef_;
-    } else {
+    } else if (sizesDiff == 0 && lastRet == _undef_ && lastCost > max_cost) return _undef_;
+    else {
         Int B = 1;
         for (int i = 0; i < base.size(); i++)
             if ((B *= (Int)base[i]) > sum) { base.shrink(base.size() - i); break; }

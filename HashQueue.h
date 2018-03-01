@@ -40,9 +40,9 @@ class HashQueue {
     }
     void packBase(const vec<int>& nbase, unsigned long long int &base0, unsigned long long int &base1) {
         base0 = base1 = 0;
-        for (int sz = sizeof(unsigned long long int)*CHAR_BIT, i=0; i < nbase.size(); sz -= pbits, i++) 
-            sz >= (int)pbits ? base0 = (base0 << pbits) | primeIndex[nbase[i]] 
-                             : base1 = (base1 << pbits) | primeIndex[nbase[i]];
+        for (int sz = maxBaseSize/2, i = nbase.size() - 1; i >= 0; i--) 
+           i < sz ? base0 = (base0 << pbits) | primeIndex[nbase[i]] 
+                  : base1 = (base1 << pbits) | primeIndex[nbase[i]];
     }
     unsigned long long int hashBase(const vec<int>& nbase) {
         int count[elemsof(prime)] = {0};
