@@ -56,7 +56,7 @@ bool     opt_old_format    = false;
 int      opt_sort_alg      = 4;
 int      opt_sort_alg2     = 1;
 bool     opt_shared_fmls   = false;
-int      opt_base_max      = 17;
+int      opt_base_max      = 47;
 int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 

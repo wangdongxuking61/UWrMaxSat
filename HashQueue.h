@@ -7,8 +7,9 @@
 #include "Map.h"
 #include "Heap.h"
 
-static const int prime[] = { 2, 3, 5, 7, 11, 13, 17 };
-static const int primeIndex[] = {0, 0, 1, 2, 0, 3, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 7};
+static const int prime[] = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47 };
+static const int primeIndex[] = {0, 0, 1, 2, 0, 3, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0, 7, 0, 8,
+                                 0, 0, 0, 9, 0, 0, 0, 0, 0,10, 0,11, 0, 0, 0, 0, 0,12, 0, 0, 0,13, 0,14, 0, 0, 0,15 };
 
 constexpr size_t log2(size_t n) { return ( (n<2) ? 1 : 1+log2(n/2)); }
 constexpr size_t pbits = log2(elemsof(prime)), pmask = (1 << pbits) - 1;
