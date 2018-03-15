@@ -63,7 +63,8 @@ bool PbSolver::convertPbs(bool first_call)
                     Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * add_sort_factor));
                     if (result == _undef_) {
                         result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
-                        if (result != _undef_) first_call ? ++bddEncodings : ++bddOptEncodings;
+                        if (result != _undef_) 
+                            if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings;
                     } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
                     if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
                     else converted_constrs.push(result);

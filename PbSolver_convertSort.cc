@@ -98,7 +98,7 @@ void optimizeBase(vec<Int>& seq, int carry_ins,int cost, vec<int>& base, int& co
                 new_seq.push(div);
         }
 
-        int new_cost = cost+rest, new_carry_ins = rest/p;
+        int new_cost = cost+rest - carry_ins/2, new_carry_ins = rest/p;
         if (new_cost < cost_bestfound && new_cost + new_seq.size() <= cost_bestfound) {
             base.push(p);
             int final_cost = finalCost(new_seq, new_cost);
@@ -308,29 +308,49 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static int lastCost = 0;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
-    bool lastBaseOK = sizesDiff >= 0; //, negate;    
+    bool lastBaseOK = sizesDiff >= 0, negate = false; // = opt_shared_fmls;    
     Int sum = 0, oldlo = lo, oldhi = hi;
 
     for (int i = 0; i < c.size; i++) sum += c(i);
     /*negate = c.hi != Int_MAX && c.hi > sum/2 && (c.lo == Int_MIN || sum - c.lo < c.hi) || 
-             c.lo != Int_MIN && c.lo > sum/2;    
+             c.lo != Int_MIN && c.lo > sum/2;    */
     if (negate)
         lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi,
 	hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
-    else*/ lo = c.lo, hi = c.hi;
+    else lo = c.lo, hi = c.hi;
         
     for (int i = 0, j = 0; lastBaseOK && j < c.size; j++) {
         while (i < Cs.size() && c(j) > Cs[i]) i++;
-        if (i == Cs.size()) lastBaseOK = false; else i++;
+        if (i == Cs.size() || c(j) < Cs[i]) lastBaseOK = false; else i++;
     }
-    ps.clear(), Cs.clear();
-    for (int j = 0; j < c.size; j++)
-	ps.push(/*negate ? neg(lit2fml(c[j])) :*/ lit2fml(c[j])),
-        Cs.push(c(j));
-
+    bool lastEncodingOK = lastBaseOK && opt_shared_fmls;
+    Int sumAssigned = 0, tmp_lo = lo, tmp_hi = hi;
+    extern PbSolver *pb_solver;
+    int j = 0;
+    for (int i = 0; lastEncodingOK && i < ps.size(); i++) {
+        Lit   psi_lit = mkLit(index(ps[i]),sign(ps[i]));
+        lbool psi_val = pb_solver->value(psi_lit);
+        if (j < c.size && psi_lit == (negate ? ~c[j] : c[j]) && Cs[i] == c(j)) j++;
+        else if (psi_val != l_Undef) {
+            if (psi_val == l_True) {
+                if (tmp_lo != Int_MIN) tmp_lo += Cs[i];
+                if (tmp_hi != Int_MAX) tmp_hi += Cs[i];
+            }
+            sumAssigned += Cs[i];
+        }
+        else lastEncodingOK = false;
+    }
+    if (j < c.size) lastEncodingOK = false;
+    if (!lastEncodingOK) {
+        ps.clear(), Cs.clear();
+        for (int j = 0; j < c.size; j++)
+	    ps.push(negate ? neg(lit2fml(c[j])) : lit2fml(c[j])),
+            Cs.push(c(j));
+    } else sum += sumAssigned, lo = tmp_lo, hi = tmp_hi;
     int      cost;
     static vec<int> base;
-    if (!lastBaseOK || sizesDiff > 0 && (base.size() <= 8 || sizesDiff * 8 > c.size)) {
+    if (!lastBaseOK || !lastEncodingOK && sizesDiff > 0 && 
+                                      (base.size() <= 8 || sizesDiff * 8 > c.size)) {
         optimizeBase(Cs, cost, base);
         /**/pf("cost=%d, base.size=%d\n", cost, base.size());
     } else if (sizesDiff == 0 && lastRet == _undef_ && lastCost > max_cost) return _undef_;
