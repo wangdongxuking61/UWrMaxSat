@@ -132,6 +132,7 @@ static void bottomup4OddEvenSort(vec<Formula>& vars, int ineq);
 //                    unsigned k, int ineq);
 
 static void OddEven4Select(vec<Formula>& vars, unsigned k, int ineq);
+static void bottomupOddEven4Select(vec<Formula>& vars, unsigned k, int ineq);
 static void OddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
                     vec<Formula>& outvars, unsigned k);
 static void OddEven4Merge(vec<Formula> const& a, vec<Formula> const& b, vec<Formula> const& c, 
@@ -152,8 +153,8 @@ void oddEvenSort(vec<Formula>& vars, int max_sel, int ineq)
         }*/
         case 2: OddEvenSelect(vars, k, ineq);  break;
         case 4: OddEven4Select(vars, k, ineq); break;
-        case 5: bottomup4OddEvenSort(vars, ineq); break;                                                     }  
-    
+        case 5: bottomupOddEven4Select(vars, k, ineq); break; //bottomup4OddEvenSort(vars, ineq); break;
+    }  
 }
 
 void merge(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq)
@@ -503,6 +504,69 @@ static void OddEven4Merge(vec<Formula> const& a, vec<Formula> const& b, vec<Form
     
     // combine results
     OddEven4Combine(x,y,outvars,k);
+}
+
+static void bottomupOddEven4Select(vec<Formula>& vars, unsigned k, int ineq)
+{
+    int n = vars.size(), max_len = 0;
+
+    if ((int)k > n) k = n;
+    if (k == 0) { vars.clear(); return; }
+    if (k == 1 && ineq != 0) { DirectSort(vars, k, ineq); return; }
+    int dir_sort_size = k == 2 ? 7 : 5;
+
+    vec<int> positions;
+    vec<Formula> tmp, singles;
+    positions.push(0); // split input vars into subsequenses of the same literal or sorted 5 singletons 
+    for (int last =0, i=1; i <= n; i++)
+        if (i == n || vars[i] != vars[i-1]) {
+            int len = i - last, tmp_sz = tmp.size() ;
+            if (len > 1) { for (int j=last; j < i; j++) tmp.push(vars[j]); positions.push(tmp.size()); }
+            else singles.push(vars[i-1]);
+            if (singles.size() == dir_sort_size || i == n && singles.size() > 0) {
+                DirectSort(singles, k, ineq);
+                for (int j=0; j < singles.size(); j++) tmp.push(singles[j]);
+                positions.push(tmp.size());
+                singles.clear();
+            } 
+            max_len = max(max_len, tmp.size() - tmp_sz);
+            last = i;
+        }
+    if (positions.size() == 2) { vars.clear(); tmp.copyTo(vars); } 
+    else { // sort (by counting) vars with respect to the sizes of the subsequences in decreasing order
+        vec<int> len_count(max_len+1, 0), start_pos(max_len+1, 0);
+
+        for (int i = positions.size()-1; i > 0; i--) len_count[positions[i] - positions[i-1]]++;
+        for (int i = max_len; i > 1; i--) start_pos[i-1] = start_pos[i] + len_count[i] * i;
+        for (int i = 1; i < positions.size(); i++) // copy literals from tmp to correct positions
+            for (int p = positions[i-1], len = positions[i] - p, j = 0; j < len; j++) vars[start_pos[len]++] = tmp[p++];
+        for (int i = 1, len = max_len; len > 0; len--) // set new start positions of the subsequences
+            for (int cnt = len_count[len]; cnt > 0; cnt--, i++) positions[i] = positions[i-1] + len; 
+        // in loop: merge each 4 (or less) consequtive subsequences into one and select at most k largest items until one subsequence remains
+        for (int seq_to_merge = positions.size() - 1; seq_to_merge > 1; seq_to_merge = (seq_to_merge+3)/4) {
+            int step = 4, next = 0;
+            for (int i = 0; i < seq_to_merge; i += step) {
+                vec<Formula> invars[4], outvars;
+                int tlength = 0;
+                if (seq_to_merge - i == 5 || seq_to_merge - i == 6) step = 3;
+                for (int j = 0; j < min(step, seq_to_merge - i); j++) {
+                    for (int p = positions[i+j], len = min((int)k, positions[i+j+1] - p); len > 0; p++, len--) invars[j].push(vars[p]);
+                    tlength += invars[j].size();
+                }
+                if (ineq != 0 && preferDirectMerge(tlength, k)) {
+                    vec<Formula> out1,out2;
+                    DirectMerge(invars[0], invars[1], out1, k, ineq);
+                    DirectMerge(invars[2], invars[3], out2, k, ineq);
+                    DirectMerge(out1, out2, outvars, k, ineq);
+                } else
+                    OddEven4Merge(invars[0], invars[1], invars[2], invars[3], outvars, k, ineq);
+                for (int p = positions[i], len = min((int)k, outvars.size()), j = 0; j < len; j++, p++) vars[p] = outvars[j];
+                positions[next++] = positions[i]; 
+            }
+            positions[next] = n;
+        }
+    }
+    vars.shrink(vars.size() - k);
 }
 
 static void modifiedOddEvenMerge(vec<Formula>& fs, int begin, int end, int ineq)

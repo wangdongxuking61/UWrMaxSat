@@ -54,9 +54,9 @@ bool PbSolver::convertPbs(bool first_call)
                 converted_constrs.push(convertToBdd(c)), first_call ? ++bddEncodings : ++bddOptEncodings;
             else if (opt_convert == ct_Mixed) {
                 int adder_cost = estimatedAdderCost(c);
-                int different_cs = 1; for (int i = 1; i < c.size; i++) if (c(i) != c(i-1)) different_cs++;
+                //int different_cs = 1; for (int i = 1; i < c.size; i++) if (c(i) != c(i-1)) different_cs++;
                 //**/printf("estimatedAdderCost: %d\n", estimatedAdderCost(c));
-                if (first_call || opt_convert_goal == opt_convert/*&& different_cs > c.size/10*/) {
+                /*if (first_call || opt_convert_goal == opt_convert) {
   	            Int max_coeff = c(c.size-1);
   	            int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
                     double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
@@ -68,13 +68,13 @@ bool PbSolver::convertPbs(bool first_call)
                     } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
                     if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
                     else converted_constrs.push(result);
-                } else {
-                    Formula result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
+                } else*/ {
+                    Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres)); 
                     if (result == _undef_) {
-                        result = buildConstraint(c, (int)(adder_cost * opt_sort_thres));
+                        result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
                         if (result != _undef_)
-                            if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings; 
-                    } else if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings;
+                            if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings; 
+                    } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
                     if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
                     else converted_constrs.push(result);
                 }
