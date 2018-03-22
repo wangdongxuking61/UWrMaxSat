@@ -47,7 +47,6 @@ extern Int      opt_goal;
 extern Command  opt_command;
 extern bool     opt_branch_pbvars;
 extern int      opt_polarity_sug;
-extern int      opt_sort_alg, opt_sort_alg2;
 extern bool     opt_shared_fmls;
 extern int      opt_base_max;
 extern int      opt_minimization;

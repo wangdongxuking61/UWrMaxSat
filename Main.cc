@@ -42,19 +42,17 @@ int      opt_verbosity = 1;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
 
 bool     opt_preprocess    = true;
-ConvertT opt_convert       = ct_Mixed;
+ConvertT opt_convert       = ct_Sorters;
 ConvertT opt_convert_goal  = ct_Undef;
 bool     opt_convert_weak  = true;
-double   opt_bdd_thres     = 3;
+double   opt_bdd_thres     = 100;
 double   opt_sort_thres    = 200;
-double   opt_goal_bias     = 100;
+double   opt_goal_bias     = 10;
 Int      opt_goal          = Int_MAX;
 Command  opt_command       = cmd_Minimize;
 bool     opt_branch_pbvars = false;
 int      opt_polarity_sug  = 1;
 bool     opt_old_format    = false;
-int      opt_sort_alg      = 5;
-int      opt_sort_alg2     = 5;
 bool     opt_shared_fmls   = false;
 int      opt_base_max      = 47;
 int      opt_cpu_lim       = INT32_MAX;
@@ -82,17 +80,20 @@ cchar* doc =
     "\n"
     "Solver options:\n"
     "  -ca -adders   Convert PB-constrs to clauses through adders.\n"
-    "  -cs -sorters  Convert PB-constrs to clauses through sorters.\n"
+    "  -cs -sorters  Convert PB-constrs to clauses through sorters. (default)\n"
     "  -cb -bdds     Convert PB-constrs to clauses through bdds.\n"
-    "  -cm -mixed    Convert PB-constrs to clauses by a mix of the above. (default)\n"
+    "  -cm -mixed    Convert PB-constrs to clauses by a mix of the above.\n"
     "  -ga/gs/gb/gm  Override conversion for goal function (long name: -goal-xxx).\n"
     "  -w -weak-off  Clausify with equivalences instead of implications.\n"
     "  -no-pre       Don't use MiniSat's CNF-level preprocessing.\n"
     "\n"
+    "  -cpu-lim=     CPU time limit in seconds. Zero - no limit. (default)\n"
+    "  -mem-lim=     Memory limit in MB. Zero - no limit. (default)\n"
+    "\n"
     "  -bdd-thres=   Threshold for prefering BDDs in mixed mode.        [def: %g]\n"
-    "  -sort-thres=  Threshold for prefering sorters. Tried after BDDs. [def: %g]\n"
+    "  -sort-thres=  Threshold for prefering sorters. Tried before BDDs.[def: %g]\n"
     "  -goal-bias=   Bias goal function convertion towards sorters.     [def: %g]\n"
-    "  -base-max=    Maximal number (<= 17) to be used in sorter base.  [def: %d]\n"
+    "  -base-max=    Maximal number (<= %d) to be used in sorter base.  [def: %d]\n"
     "\n"
     "  -1 -first     Don\'t minimize, just give first solution found\n"
     "  -A -all       Don\'t minimize, give all solutions\n"
@@ -100,8 +101,10 @@ cchar* doc =
     "\n"
     "  -p -pbvars    Restrict decision heuristic of SAT to original PB variables.\n"
     "  -ps{+,-,0}    Polarity suggestion in SAT towards/away from goal (or neutral).\n"
-    "  -alt          Alternative search for minimization.\n"
-    "  -seq          Sequential search for minimization.\n"
+    "  -seq          Sequential search for the optimum value of goal.\n"
+    "  -bin          Binary search for the optimum value of goal. (default)\n"
+    "  -alt          Alternating search for the optimum value of goal. (a mix of the above)\n"
+
     "\n"
     "Input options:\n"
     "  -of -old-fmt  Use old variant of OPB file format.\n"
@@ -144,7 +147,7 @@ void parseOptions(int argc, char** argv)
     for (int i = 1; i < argc; i++){
         char*   arg = argv[i];
         if (arg[0] == '-'){
-            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max), exit(0);
+            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, opt_base_max), exit(0);
 
             else if (oneof(arg, "ca,adders" )) opt_convert = ct_Adders;
             else if (oneof(arg, "cs,sorters")) opt_convert = ct_Sorters;
@@ -188,8 +191,9 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "v1"        )) opt_verbosity = 1;
             else if (oneof(arg, "v2"        )) opt_verbosity = 2;
             else if (strncmp(arg, "-sa", 3 ) == 0) {
-                if (arg[3] >= '1' && arg[3] <= '5') opt_sort_alg = arg[3]-'0';
-                if (arg[3] != '\0' && arg[4] >= '1' && arg[4] <= '5') opt_sort_alg2 = arg[4]-'0';
+                if (arg[3] == '2') opt_shared_fmls = true;
+                //if (arg[3] >= '1' && arg[3] <= '5') opt_sort_alg = arg[3]-'0';
+                //if (arg[3] != '\0' && arg[4] >= '1' && arg[4] <= '5') opt_sort_alg2 = arg[4]-'0';
             }
             else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);

@@ -98,7 +98,7 @@ void optimizeBase(vec<Int>& seq, int carry_ins,int cost, vec<int>& base, int& co
                 new_seq.push(div);
         }
 
-        int new_cost = cost+rest - carry_ins/2, new_carry_ins = rest/p;
+        int new_cost = cost+rest - carry_ins*3/4, new_carry_ins = rest/p;
         if (new_cost < cost_bestfound && new_cost + new_seq.size() <= cost_bestfound) {
             base.push(p);
             int final_cost = finalCost(new_seq, new_cost);
@@ -158,7 +158,7 @@ void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter, int m
         else
             for (int j = 0; j < Cs[i]; j++)
                 out_sorter.push(ps[i]);
-    oddEvenSort(out_sorter, max_sel, ineq); // (overwrites inputs)
+    encodeBySorter(out_sorter, max_sel, ineq); // (overwrites inputs)
     if (count1 > 0) {
         out_sorter.growTo(out_sorter.size()+count1);
 	for (int i=out_sorter.size()-1; i >= count1; i--) out_sorter[i] = out_sorter[i-count1];
@@ -197,7 +197,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
         vec<Formula> sorted;
         buildSorter(ps, Cs, sorted, max_sel, ineq);
         // Add carry bits:
-        merge(sorted, carry, out_digits,  max_sel, ineq);
+        encodeByMerger(sorted, carry, out_digits,  max_sel, ineq);
     }else{
         vec<Formula>    ps_rem;
         vec<int>        Cs_rem;
@@ -223,7 +223,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
         vec<Formula> sorted, result;
         buildSorter(ps_rem, Cs_rem, sorted, -1, ineq);
         // Add carry bits:
-        merge(sorted, carry, result, sorted.size()+carry.size(), ineq);
+        encodeByMerger(sorted, carry, result, sorted.size()+carry.size(), ineq);
 
         // Get carry bits:
         carry.clear();

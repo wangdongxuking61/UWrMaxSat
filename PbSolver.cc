@@ -550,7 +550,6 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_convert_goal != ct_Undef)
         opt_convert = opt_convert_goal;
     opt_sort_thres *= opt_goal_bias;
-    opt_sort_alg = opt_sort_alg2;  // OddEvenSort by default - M. Piotrow 19.02.2018
     opt_shared_fmls = true;
 
     if (opt_goal != Int_MAX)
@@ -608,6 +607,7 @@ void PbSolver::solve(solve_Command cmd)
                 break;
 
             best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
+            if (opt_satlive || opt_verbosity == 0) { printf("o %s\n", toString(best_goalvalue * goal_gcd)); fflush(stdout); }
             if (cmd == sc_FirstSolution) break;
 
             if (opt_verbosity >= 1){
