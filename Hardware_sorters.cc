@@ -19,6 +19,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Hardware.h"
 
+void encodeBySorter(vec<Formula>& vars, int max_sel, int ineq);
+void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq);
+
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 macro Formula operator && (Formula f, Formula g)
@@ -36,29 +39,26 @@ macro Formula operator && (Formula f, Formula g)
 macro Formula operator || (Formula f, Formula g) {
     return ~(~f && ~g); }
 
-
-void encodeBySorter(vec<Formula>& vars, int max_sel, int ineq);
-void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq);
-
-static void OddEven4Select(vec<Formula>& vars, unsigned k, int ineq);
+static void oddEvenSelect(vec<Formula>& vars, unsigned k, int ineq);
 static void splitAndSortSubsequences(vec<Formula>& vars, vec<int>& positions, unsigned k, int ineq);
-static void OddEven4Merge(vec<Formula> const in[4], vec<Formula>& outvars, unsigned int k, int ineq);
-static void OddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
-                    vec<Formula>& outvars, unsigned k);
+static void oddEvenMerge(vec<Formula> const in[4], vec<Formula>& outvars, unsigned int k, int ineq);
+static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<Formula>& outvars, unsigned k);
+static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, vec<Formula>& outvars, unsigned k);
 
 static inline bool preferDirectMerge(unsigned n, unsigned k);
-static void DirectMerge(const vec<Formula>& in1, const vec<Formula>& in2, 
+static void directMerge(const vec<Formula>& in1, const vec<Formula>& in2, 
                     vec<Formula>& outvars, unsigned k, int ineq);
-static void DirectSort(vec<Formula>& vars, unsigned k, int ineq);
-static void DirectCardClauses(const vec<Formula>& invars, unsigned start, 
+static void directSort(vec<Formula>& vars, unsigned k, int ineq);
+static void directCardClauses(const vec<Formula>& invars, unsigned start, 
                      unsigned pos, unsigned j, vec<Formula>& args, int ineq);
 
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void encodeBySorter(vec<Formula>& vars, int max_sel, int ineq)
 {
     int k = opt_shared_fmls || max_sel < 0 || max_sel >= vars.size() ? vars.size() : max_sel;
 
-    OddEven4Select(vars, k, ineq);
+    oddEvenSelect(vars, k, ineq);
 }
 
 void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq)
@@ -67,21 +67,23 @@ void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formul
     vec<Formula> invars[4];
 
     if (ineq != 0 && preferDirectMerge(n,k))
-        DirectMerge(in1, in2, outvars, k, ineq);
+        directMerge(in1, in2, outvars, k, ineq);
     else {
         if (in1.size() >= in2.size()) { in1.copyTo(invars[0]); in2.copyTo(invars[1]); }
         else                          { in1.copyTo(invars[1]); in2.copyTo(invars[0]); }
-        OddEven4Merge(invars, outvars, k, ineq);
+        oddEvenMerge(invars, outvars, k, ineq);
     }
  }
  
-static void OddEven4Select(vec<Formula>& vars, unsigned k, int ineq)
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+static void oddEvenSelect(vec<Formula>& vars, unsigned k, int ineq)
 {
     int n = vars.size();
 
     if ((int)k > n) k = n;
     if (k == 0) { vars.clear(); return; }
-    if (k == 1) { DirectSort(vars, k, ineq); return; }
+    if (k == 1) { directSort(vars, k, ineq); return; }
 
     vec<int> positions;
 
@@ -94,19 +96,24 @@ static void OddEven4Select(vec<Formula>& vars, unsigned k, int ineq)
             for (int i = 0; i < seq_to_merge; i += step) {
                 vec<Formula> invars[4], outvars;
                 int tlength = 0;
-                if (seq_to_merge - i == 5 || seq_to_merge - i == 6) step = 3;
+                if (seq_to_merge - i == 5 /*|| seq_to_merge - i == 6*/) step = 3;
                 for (int j = 0; j < min(step, seq_to_merge - i); j++) {
-                    for (int p = positions[i+j], len = min((int)k, positions[i+j+1] - p); len > 0; p++, len--) invars[j].push(vars[p]);
+                    for (int p = positions[i+j], len = min((int)k, positions[i+j+1] - p); len > 0; p++, len--) 
+                        invars[j].push(vars[p]);
                     tlength += invars[j].size();
                 }
                 if (ineq != 0 && preferDirectMerge(tlength, k)) {
-                    vec<Formula> out1,out2;
-                    DirectMerge(invars[0], invars[1], out1, k, ineq);
-                    DirectMerge(invars[2], invars[3], out2, k, ineq);
-                    DirectMerge(out1, out2, outvars, k, ineq);
-                } else
-                    OddEven4Merge(invars, outvars, k, ineq);
-                for (int p = positions[i], len = min((int)k, outvars.size()), j = 0; j < len; j++, p++) vars[p] = outvars[j];
+                    if (invars[2].size() > 0) {
+                        vec<Formula> out1,out2;
+                        directMerge(invars[0], invars[1], out1, k, ineq);
+                        directMerge(invars[2], invars[3], out2, k, ineq);
+                        directMerge(out1, out2, outvars, k, ineq);
+                    } else 
+                        directMerge(invars[0], invars[1], outvars, k, ineq);
+                } else 
+		    oddEvenMerge(invars, outvars, k, ineq);
+                for (int p = positions[i], len = min((int)k, outvars.size()), j = 0; j < len; j++, p++) 
+                    vars[p] = outvars[j];
                 positions[next++] = positions[i]; 
             }
             positions[next] = n;
@@ -128,7 +135,7 @@ static void splitAndSortSubsequences(vec<Formula>& vars, vec<int>& positions, un
             if (len > 1) { for (int j=last; j < i; j++) tmp.push(vars[j]); positions.push(tmp.size()); }
             else singles.push(vars[i-1]);
             if (singles.size() == dir_sort_size || i == n && singles.size() > 0) {
-                DirectSort(singles, k, ineq);
+                directSort(singles, k, ineq);
                 for (int j=0; j < singles.size(); j++) tmp.push(singles[j]);
                 positions.push(tmp.size());
                 singles.clear();
@@ -149,7 +156,7 @@ static void splitAndSortSubsequences(vec<Formula>& vars, vec<int>& positions, un
     }
 }
 
-static void OddEven4Merge(vec<Formula> const in[4], vec<Formula>& outvars, unsigned int in_k, int ineq) {
+static void oddEvenMerge(vec<Formula> const in[4], vec<Formula>& outvars, unsigned int in_k, int ineq) {
     int n = in[0].size() + in[1].size() + in[2].size() + in[3].size(), k = min((int)in_k, n);
     int nn[4] = { min(k, in[0].size()), min(k, in[1].size()), min(k, in[2].size()), min(k, in[3].size()) };    
     assert(nn[0] > 0); assert(nn[0] >= nn[1]); assert(nn[1] >= nn[2]); assert(nn[2] >= nn[3]);
@@ -161,7 +168,7 @@ static void OddEven4Merge(vec<Formula> const in[4], vec<Formula>& outvars, unsig
     if (nn[0] == 1) {
         for (int i = 0; i < 4; i++)
             if (nn[i] > 0) outvars.push(in[i][0]);
-        DirectSort(outvars, k, ineq); 
+        directSort(outvars, k, ineq); 
         return;
     }
     // from now on: nn[0] > 1 && nn[1] > 0 
@@ -172,23 +179,39 @@ static void OddEven4Merge(vec<Formula> const in[4], vec<Formula>& outvars, unsig
             even_odd[j % 2][i].push(in[i][j]);
     
     // recursive merges
-    OddEven4Merge(even_odd[0], x, k/2+2,ineq);
-    OddEven4Merge(even_odd[1], y, k/2,  ineq);
+    oddEvenMerge(even_odd[0], x, k/2+2,ineq);
+    oddEvenMerge(even_odd[1], y, k/2,  ineq);
     
     // combine results
-    OddEven4Combine(x,y,outvars,k);
+    if (nn[2] > 0)
+        oddEven4Combine(x,y,outvars,k);
+    else
+        oddEvenCombine(x,y,outvars,k);
 }
 
-static void OddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
+static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<Formula>& outvars, unsigned k) {
+    unsigned a = x.size(), b = y.size();
+    if (k > a+b) k = a+b;   
+ 
+    outvars.push(x[0]);
+    for (unsigned i = 0 ; i < (k-1)/2 ; i++) { // use a row of comparators
+        outvars.push(y[i] | x[i+1]);
+	outvars.push(y[i] & x[i+1]);
+    }
+    // set outvars[k-1] if k is even
+    if (k % 2 == 0)
+        outvars.push(k < a + b ? y[k/2-1] | x[k/2] : a == b ? y[k/2-1] : x[k/2]);
+}
+    
+static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
                            vec<Formula>& outvars, unsigned k) {
     unsigned a = x.size(), b = y.size();
     assert(a >= b); assert(a <= b+4); assert(a >= 2); assert(b >= 1); 
     if (k > a+b) k = a+b;   
 
-    // set outvars[0] = x[0];
     outvars.push(x[0]);
     unsigned last = (k < a+b || k % 2 == 1 || a == b+2 ? k : k-1);
-    for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) {
+    for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) { // use two rows of comparators
 	Formula ret = _0_;
         if (j %2 == 0) {
 	    if (i+1 < a && i < b+2) ret = ret || x[i+1] && (i >= 2 ? y[i-2] : _1_);
@@ -201,9 +224,8 @@ static void OddEven4Combine(vec<Formula> const& x, vec<Formula> const& y,
         outvars.push(ret);
 
     }
-    if (k == a+b && k % 2 == 0 && a != b+2)
-        if (a == b) outvars.push(y[b-1]);
-        else outvars.push(x[a-1]);
+    if (k % 2 == 0 && k == a+b && a != b+2)
+        outvars.push(a == b ? y[b-1] : x[a-1]);
 }
 
 static inline bool preferDirectMerge(unsigned n, unsigned k) {
@@ -214,7 +236,7 @@ static inline bool preferDirectMerge(unsigned n, unsigned k) {
     return k < minTest ? true : (k > maxTest ? false : (n < nBound[k-minTest]));
 }
 
-static void DirectMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<Formula>& outvars, unsigned k, int ineq) {
+static void directMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<Formula>& outvars, unsigned k, int ineq) {
     // k is the desired size of sorted output; 1s (if ineq < ) or 0s (else) will be propagated from inputs to outputs.
     assert(outvars.size() == 0);
   
@@ -239,7 +261,7 @@ static void DirectMerge(const vec<Formula>& in1, const vec<Formula>& in2,vec<For
     }
 }
 
-static void DirectSort(vec<Formula>& vars, unsigned k, int ineq) {
+static void directSort(vec<Formula>& vars, unsigned k, int ineq) {
     unsigned n = vars.size();
    
     if (k > n) k = n;
@@ -249,7 +271,7 @@ static void DirectSort(vec<Formula>& vars, unsigned k, int ineq) {
             vec<Formula> args;
             for (unsigned i=0 ; i < j; i++) args.push(_1_);
             args.push(_0_);
-            DirectCardClauses(invars, 0, 0, j, args, ineq); //vars[j-1] := \/ (1<= i1 < .. <ij <= n) /\ (s=1..j) invars[is]
+            directCardClauses(invars, 0, 0, j, args, ineq); //vars[j-1] := \/ (1<= i1 < .. <ij <= n) /\ (s=1..j) invars[is]
             vars[j-1] = args[j];
         }
     } else {
@@ -257,14 +279,14 @@ static void DirectSort(vec<Formula>& vars, unsigned k, int ineq) {
             vec<Formula> args;
             for (unsigned i=0 ; i < j; i++) args.push(_0_);
             args.push(_1_);
-            DirectCardClauses(invars, 0, 0, j, args, ineq); // outvars[j-1] := /\ (1<= i1 < .. <ij <= n) \/ (s=1..j) invars[is]
+            directCardClauses(invars, 0, 0, j, args, ineq); // outvars[j-1] := /\ (1<= i1 < .. <ij <= n) \/ (s=1..j) invars[is]
             vars[n-j] = args[j];
         }
     }
     vars.shrink(n-k);
 }
 
-static void DirectCardClauses(const vec<Formula>& invars, unsigned start, unsigned pos, unsigned j, vec<Formula>& args, int ineq) {
+static void directCardClauses(const vec<Formula>& invars, unsigned start, unsigned pos, unsigned j, vec<Formula>& args, int ineq) {
     // 1s will be propagated from inputs to outputs if ineq < 0; 0s - otherwise.
     unsigned n = invars.size();
     if (pos == j) {
@@ -280,6 +302,6 @@ static void DirectCardClauses(const vec<Formula>& invars, unsigned start, unsign
     } else
         for (unsigned i = start ; i <= n - (j - pos) ; i++) {
 	    args[pos] = invars[i];
-	    DirectCardClauses(invars, i+1, pos+1, j, args, ineq);
+	    directCardClauses(invars, i+1, pos+1, j, args, ineq);
         }
 }

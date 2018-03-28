@@ -42,10 +42,10 @@ int      opt_verbosity = 1;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
 
 bool     opt_preprocess    = true;
-ConvertT opt_convert       = ct_Sorters;
+ConvertT opt_convert       = ct_Mixed;
 ConvertT opt_convert_goal  = ct_Undef;
 bool     opt_convert_weak  = true;
-double   opt_bdd_thres     = 100;
+double   opt_bdd_thres     = 10;
 double   opt_sort_thres    = 200;
 double   opt_goal_bias     = 10;
 Int      opt_goal          = Int_MAX;
