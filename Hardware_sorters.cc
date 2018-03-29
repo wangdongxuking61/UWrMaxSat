@@ -192,9 +192,9 @@ static void oddEvenMerge(vec<Formula> const in[4], vec<Formula>& outvars, unsign
 static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<Formula>& outvars, unsigned k) {
     unsigned a = x.size(), b = y.size();
     if (k > a+b) k = a+b;   
- 
+    // both x and y are sorted and the numbers of ones in them satisfy: ones(y) <= ones(x) <= ones(y)+2
     outvars.push(x[0]);
-    for (unsigned i = 0 ; i < (k-1)/2 ; i++) { // use a row of comparators
+    for (unsigned i = 0 ; i < (k-1)/2 ; i++) { // zip x with y and use a row of comparators: y[i] : x[i+1], i = 0,...
         outvars.push(y[i] | x[i+1]);
 	outvars.push(y[i] & x[i+1]);
     }
@@ -208,15 +208,15 @@ static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y,
     unsigned a = x.size(), b = y.size();
     assert(a >= b); assert(a <= b+4); assert(a >= 2); assert(b >= 1); 
     if (k > a+b) k = a+b;   
-
+    // both x and y are sorted and the numbers of ones in them satisfy: ones(y) <= ones(x) <= ones(y)+4 
     outvars.push(x[0]);
     unsigned last = (k < a+b || k % 2 == 1 || a == b+2 ? k : k-1);
-    for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) { // use two rows of comparators
+    for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) { // zip x with y and use two rows of comparators: first y[i] : x[i+2], then y[i] : x[i+1] 
 	Formula ret = _0_;
-        if (j %2 == 0) {
+        if (j %2 == 0) { // new x[i] = min( max(y[i-1], x[i+1]), min(y[i-2], x[i]) ) = y[i-1] && x[i] || y[i-2] && x[i+1]
 	    if (i+1 < a && i < b+2) ret = ret || x[i+1] && (i >= 2 ? y[i-2] : _1_);
             if (i < a && i < b+1)   ret = ret || x[i] && y[i-1];
-        } else {
+        } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) ) = y[i] || x[i+2] || y[i-1] && x[i+1]
             if (i > 0 && i+2 < a)   ret = ret || x[i+2];
             if (i < b)              ret = ret || y[i];
             if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
