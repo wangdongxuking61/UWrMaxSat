@@ -18,9 +18,9 @@ BUILD_DIR      ?= build
 MINISATP_RELSYM ?= -g
 
 # Sets of compile flags for different build types
-MINISATP_REL    ?= -O3 -D NDEBUG
-MINISATP_DEB    ?= -O0 -D DEBUG 
-MINISATP_PRF    ?= -O3 -D NDEBUG
+MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
+MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing
+MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
 MINISATP_FPIC   ?= -fpic
 
 # GNU Standard Install Variables
@@ -32,7 +32,7 @@ datarootdir ?= $(prefix)/share
 mandir      ?= $(datarootdir)/man
 
 # Dependencies
-MINISAT_INCLUDE?=-I$(includedir)
+MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat
 MINISAT_LIB    ?=-L$(libdir) -lminisat
 
 ## Write Configuration  ###########################################################################
