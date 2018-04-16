@@ -224,7 +224,7 @@ static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y,
         } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) )
             if (ineq < 0) { // = y[i] || x[i+2] || y[i-1] && x[i+1], encoded as 3 clauses
                 ret = (i < b ? y[i] : _0_);
-                if (i+2 < a)            ret = ret || x[i+2];
+                if (i > 0 && i+2 < a)   ret = ret || x[i+2];
                 if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
             } else {       // = (y[i-1] || x[i+2]) && (y[i] || x[i+1]), encoded as 2 clauses
                 ret = ((i+1 < a ? x[i+1] : _0_) || (i < b ? y[i] : _0_));
