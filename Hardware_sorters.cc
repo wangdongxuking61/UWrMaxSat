@@ -43,7 +43,7 @@ static void oddEvenSelect(vec<Formula>& vars, unsigned k, int ineq);
 static void splitAndSortSubsequences(vec<Formula>& vars, vec<int>& positions, unsigned k, int ineq);
 static void oddEvenMerge(vec<Formula> const in[4], vec<Formula>& outvars, unsigned int k, int ineq);
 static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<Formula>& outvars, unsigned k);
-static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, vec<Formula>& outvars, unsigned k);
+static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, vec<Formula>& outvars, unsigned k, int ineq);
 
 static inline bool preferDirectMerge(unsigned n, unsigned k);
 static void directMerge(const vec<Formula>& in1, const vec<Formula>& in2, 
@@ -184,7 +184,7 @@ static void oddEvenMerge(vec<Formula> const in[4], vec<Formula>& outvars, unsign
     
     // combine results
     if (nn[2] > 0)
-        oddEven4Combine(x,y,outvars,k);
+        oddEven4Combine(x,y,outvars,k,ineq);
     else
         oddEvenCombine(x,y,outvars,k);
 }
@@ -204,7 +204,7 @@ static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<For
 }
     
 static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
-                           vec<Formula>& outvars, unsigned k) {
+                           vec<Formula>& outvars, unsigned k, int ineq) {
     unsigned a = x.size(), b = y.size();
     assert(a >= b); assert(a <= b+4); assert(a >= 2); assert(b >= 1); 
     if (k > a+b) k = a+b;   
@@ -212,14 +212,24 @@ static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y,
     outvars.push(x[0]);
     unsigned last = (k < a+b || k % 2 == 1 || a == b+2 ? k : k-1);
     for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) { // zip x with y and use two rows of comparators: first y[i] : x[i+2], then y[i] : x[i+1] 
-	Formula ret = _0_;
-        if (j %2 == 0) { // new x[i] = min( max(y[i-1], x[i+1]), min(y[i-2], x[i]) ) = y[i-1] && x[i] || y[i-2] && x[i+1]
-	    if (i+1 < a && i < b+2) ret = ret || x[i+1] && (i >= 2 ? y[i-2] : _1_);
-            if (i < a && i < b+1)   ret = ret || x[i] && y[i-1];
-        } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) ) = y[i] || x[i+2] || y[i-1] && x[i+1]
-            if (i > 0 && i+2 < a)   ret = ret || x[i+2];
-            if (i < b)              ret = ret || y[i];
-            if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
+	Formula ret;
+        if (j %2 == 0) { // new x[i] = min( max(y[i-1], x[i+1]), min(y[i-2], x[i]) )
+            if (ineq < 0) { //  = (x[i] && y[i-1]) || (x[i+1] && y[i-2]), encoded as 2 clauses
+                ret = x[i] && (i < b+1 ? y[i-1] : _0_);
+	        if (i+1 < a && i < b+2) ret = ret || x[i+1] && (i >= 2 ? y[i-2] : _1_);
+            } else {        // = x[i] && y[i-2] && (x[i+1] || y[i-1]), encoded as 3 clauses
+                ret = x[i] && (i > 1 ? y[i-2] : _1_);
+                if (i> 0) ret = ret  && ((i+1 < a ? x[i+1] : _0_) || (i < b+1 ? y[i-1] : _0_));
+            }
+        } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) )
+            if (ineq < 0) { // = y[i] || x[i+2] || y[i-1] && x[i+1], encoded as 3 clauses
+                ret = (i < b ? y[i] : _0_);
+                if (i+2 < a)            ret = ret || x[i+2];
+                if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
+            } else {       // = (y[i-1] || x[i+2]) && (y[i] || x[i+1]), encoded as 2 clauses
+                ret = ((i+1 < a ? x[i+1] : _0_) || (i < b ? y[i] : _0_));
+                if (i > 0)              ret = ret && ((i+2 < a ? x[i+2] : _0_) || (i < b+1 ? y[i-1] : _0_)); 
+            }
         }
         outvars.push(ret);
 

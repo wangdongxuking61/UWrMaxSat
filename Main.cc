@@ -39,6 +39,7 @@ bool     opt_satlive   = true;
 bool     opt_ansi      = true;
 char*    opt_cnf       = NULL;
 int      opt_verbosity = 1;
+bool     opt_model_out = true;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
 
 bool     opt_preprocess    = true;
@@ -74,7 +75,9 @@ unsigned long long int srtOptEncodings = 0, addOptEncodings = 0, bddOptEncodings
 
 cchar* doc =
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
+    "KP-MiniSat+ 1.0 by Marek Piotrów and Michał Karpiński 2018, an extension of\n"
     "MiniSat+ 1.1, based on MiniSat 2.2.0  -- (C) Niklas Een, Niklas Sorensson, 2012\n"
+    "with COMiniSatPS by Chanseok Oh 2016 as the SAT solver\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
     "USAGE: minisatp <input-file> [<result-file>] [-<option> ...]\n"
     "\n"
@@ -114,6 +117,7 @@ cchar* doc =
     "  -a -ansi      Turn off ANSI codes in output.\n"
     "  -v0,-v1,-v2   Set verbosity level (1 default)\n"
     "  -cnf=<file>   Write SAT problem to a file. Trivial UNSAT => no file written.\n"
+    "  -nm -no-model Supress model output.\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -161,6 +165,7 @@ void parseOptions(int argc, char** argv)
 
             else if (oneof(arg, "w,weak-off"     )) opt_convert_weak = false;
             else if (oneof(arg, "no-pre"))          opt_preprocess   = false;
+            else if (oneof(arg, "nm,no-model" ))    opt_model_out    = false;
 
             //(make nicer later)
             else if (strncmp(arg, "-bdd-thres=" , 11) == 0) opt_bdd_thres  = atof(arg+11);
@@ -265,7 +270,7 @@ void outputResult(const PbSolver& S, bool optimum = true)
         else                             printf("s SATISFIABLE\n");
     }
 
-    if (S.best_goalvalue != Int_MAX){
+    if (opt_model_out && S.best_goalvalue != Int_MAX){
         printf("v");
         for (int i = 0; i < S.best_model.size(); i++)
             printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
