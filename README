@@ -1,9 +1,11 @@
 ================================================================================
 Quick Install
 
-- Install MiniSat somewhere. Follow instructions in MiniSat's README.
+- Install a slightly modified version of COMiniSatPS from 
+  https://github.com/marekpiotrow/cominisatps somewhere. 
+  Follow instructions in COMiniSatPS's README.
 
-- Configure MiniSat+ using the same "prefix" as for MiniSat. This will
+- Configure KP-MiniSat+ using the same "prefix" as for COMiniSatPS. This will
   set up include-paths etc in the most simple way.
 
 - Build with "make" and install with "make install".

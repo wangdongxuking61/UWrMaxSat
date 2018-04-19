@@ -63,16 +63,28 @@ void encodeBySorter(vec<Formula>& vars, int max_sel, int ineq)
 
 void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formula>& outvars, unsigned k, int ineq)
 {
-    int n = in1.size() + in2.size();
+    int n = in1.size() + in2.size(), kk = min((int)k, n);
     vec<Formula> invars[4];
 
-    if (ineq != 0 && preferDirectMerge(n,k))
-        directMerge(in1, in2, outvars, k, ineq);
-    else {
-        if (in1.size() >= in2.size()) { in1.copyTo(invars[0]); in2.copyTo(invars[1]); }
-        else                          { in1.copyTo(invars[1]); in2.copyTo(invars[0]); }
-        oddEvenMerge(invars, outvars, k, ineq);
-    }
+    int in1_1 = 0, in1_0 = in1.size(), in2_1 = 0, in2_0 = in2.size();
+    while (in1_1 < in1.size() && in1[in1_1] == _1_) in1_1++; while (in1_0 > 0 && in1[in1_0-1] == _0_) in1_0--;
+    while (in2_1 < in2.size() && in2[in2_1] == _1_) in2_1++; while (in2_0 > 0 && in2[in2_0-1] == _0_) in2_0--;
+    int exchange = in1_0 - in1_1 < in2_0 - in2_1;
+    int ones = in1_1 + in2_1, zeroes = in1.size() - in1_0 + in2.size() - in2_0;
+    for (int i = in1_1; i < in1_0; i++) invars[exchange].push(in1[i]);
+    for (int i = in2_1; i < in2_0; i++) invars[1-exchange].push(in2[i]);
+    if (ones < kk) {
+        if (ineq != 0 && preferDirectMerge(n,k)) directMerge(invars[0], invars[1], outvars, kk-ones, ineq);
+        else                                    oddEvenMerge(invars, outvars, kk-ones, ineq);
+        int out_sz = outvars.size();
+        if (ones + zeroes > 0) {
+            if (out_sz < kk) outvars.growTo(min(kk, out_sz+ones+zeroes), _0_);
+            if (ones > 0) {
+                for (int i = min(kk, out_sz+ones)-1; i >= ones; i--) outvars[i] = outvars[i-ones];
+                for (int i = 0; i < ones; i++) outvars[i] = _1_;
+            }
+        }
+    } else outvars.growTo(kk,_1_);
  }
  
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -224,7 +236,7 @@ static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y,
         } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) )
             if (ineq < 0) { // = y[i] || x[i+2] || y[i-1] && x[i+1], encoded as 3 clauses
                 ret = (i < b ? y[i] : _0_);
-                if (i > 0 && i+2 < a)   ret = ret || x[i+2];
+                if (i+2 < a)   ret = ret || x[i+2];
                 if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
             } else {       // = (y[i-1] || x[i+2]) && (y[i] || x[i+1]), encoded as 2 clauses
                 ret = ((i+1 < a ? x[i+1] : _0_) || (i < b ? y[i] : _0_));
