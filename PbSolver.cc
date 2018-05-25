@@ -569,13 +569,21 @@ void PbSolver::solve(solve_Command cmd)
     bool    sat = false;
     Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
-    Int     LB_goalvalue = 0;
+    Int     LB_goalvalue = 0, UB_goalvalue = 0;
     int     n_solutions = 0;    // (only for AllSolutions mode)
     
     if (goal != NULL)
-      for (int i = 0; i < goal_Cs.size(); ++i)
-	if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
-    
+        for (int i = 0; i < goal_Cs.size(); ++i)
+            if (value(goal_ps[i]) != l_Undef) {
+                if (sign(goal_ps[i]) && value(goal_ps[i]) == l_False || !sign(goal_ps[i]) && value(goal_ps[i]) == l_True)
+                    LB_goalvalue += goal_Cs[i], UB_goalvalue += goal_Cs[i];
+	    } else if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
+            else UB_goalvalue += goal_Cs[i];
+    if (opt_minimization != 0 && goal != NULL && opt_goal == Int_MAX) {
+        Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+        try_lessthan = (UB_goalvalue + LB_goalvalue)/2;
+        if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))  assump_ps.push(assump_lit), convertPbs(false);
+    }
 
     while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
@@ -639,9 +647,9 @@ void PbSolver::solve(solve_Command cmd)
         assump_ps.clear();
         LB_goalvalue = try_lessthan;
 
-	if(opt_minimization != 2 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
-	  try_lessthan = best_goalvalue;
-	  if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
+	if(opt_minimization != 2 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
+	  try_lessthan = (best_goalvalue != Int_MAX ? best_goalvalue : UB_goalvalue+1);
+	  if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, lit_Undef))
 	    break;
 	} else {
 	  Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
@@ -661,7 +669,7 @@ void PbSolver::solve(solve_Command cmd)
         best_goalvalue = Int_MIN;       // (found model, but don't care about it)
     if (opt_verbosity >= 1){
         if      (!sat)
-            reportf("\bUNSATISFIABLE\b\n");
+            reportf(asynch_interrupt ? "\bUNKNOWN\b\n" : "\bUNSATISFIABLE\b\n");
         else if (goal == NULL)
             reportf("\bSATISFIABLE: No goal function specified.\b\n");
         else if (cmd == sc_FirstSolution){
