@@ -100,6 +100,7 @@ static void oddEvenSelect(vec<Formula>& vars, unsigned k, int ineq)
     vec<int> positions;
 
     splitAndSortSubsequences(vars, positions, k, ineq);
+    n = vars.size();
 
     if (positions.size() > 2) {
         // in loop: merge each 4 (or less) consequtive subsequences into one and select at most k largest items until one subsequence remains
@@ -165,6 +166,7 @@ static void splitAndSortSubsequences(vec<Formula>& vars, vec<int>& positions, un
             for (int p = positions[i-1], len = positions[i] - p, j = 0; j < len; j++) vars[start_pos[len]++] = tmp[p++];
         for (int i = 1, len = max_len; len > 0; len--) // set new start positions of the subsequences
             for (int cnt = len_count[len]; cnt > 0; cnt--, i++) positions[i] = positions[i-1] + len; 
+        vars.shrink(vars.size() - positions.last());
     }
 }
 
