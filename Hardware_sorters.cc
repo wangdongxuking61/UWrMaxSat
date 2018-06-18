@@ -216,40 +216,37 @@ static void oddEvenCombine(const vec<Formula>& x, const vec<Formula>& y, vec<For
     if (k % 2 == 0)
         outvars.push(k < a + b ? y[k/2-1] | x[k/2] : a == b ? y[k/2-1] : x[k/2]);
 }
-    
+
 static void oddEven4Combine(vec<Formula> const& x, vec<Formula> const& y, 
-                           vec<Formula>& outvars, unsigned k, int ineq) {
-    unsigned a = x.size(), b = y.size();
+                           vec<Formula>& outvars, unsigned in_k, int ineq) {
+    int a = x.size(), b = y.size(), k = min((int)in_k, a + b);
     assert(a >= b); assert(a <= b+4); assert(a >= 2); assert(b >= 1); 
-    if (k > a+b) k = a+b;   
     // both x and y are sorted and the numbers of ones in them satisfy: ones(y) <= ones(x) <= ones(y)+4 
     outvars.push(x[0]);
-    unsigned last = (k < a+b || k % 2 == 1 || a == b+2 ? k : k-1);
-    for (unsigned i = 0, j = 1 ; j < last ; j++,i=j/2) { // zip x with y and use two rows of comparators: first y[i] : x[i+2], then y[i] : x[i+1] 
-	Formula ret;
-        if (j %2 == 0) { // new x[i] = min( max(y[i-1], x[i+1]), min(y[i-2], x[i]) )
-            if (ineq < 0) { //  = (x[i] && y[i-1]) || (x[i+1] && y[i-2]), encoded as 2 clauses
-                ret = x[i] && (i < b+1 ? y[i-1] : _0_);
-	        if (i+1 < a && i < b+2) ret = ret || x[i+1] && (i >= 2 ? y[i-2] : _1_);
-            } else {        // = x[i] && y[i-2] && (x[i+1] || y[i-1]), encoded as 3 clauses
-                ret = x[i] && (i > 1 ? y[i-2] : _1_);
-                if (i> 0) ret = ret  && ((i+1 < a ? x[i+1] : _0_) || (i < b+1 ? y[i-1] : _0_));
-            }
-        } else {  // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) )
-            if (ineq < 0) { // = y[i] || x[i+2] || y[i-1] && x[i+1], encoded as 3 clauses
-                ret = (i < b ? y[i] : _0_);
-                if (i+2 < a)   ret = ret || x[i+2];
-                if (i+1 < a && i < b+1) ret = ret || x[i+1] && (i >= 1 ? y[i-1] : _1_);
-            } else {       // = (y[i-1] || x[i+2]) && (y[i] || x[i+1]), encoded as 2 clauses
-                ret = ((i+1 < a ? x[i+1] : _0_) || (i < b ? y[i] : _0_));
-                if (i > 0)              ret = ret && ((i+2 < a ? x[i+2] : _0_) || (i < b+1 ? y[i-1] : _0_)); 
-            }
-        }
-        outvars.push(ret);
 
+#define x(i) ((i) < a ? x[i] : _0_)
+#define y(i) ((i) < 0 ? _1_ : (i) < b ? y[i] : _0_)
+
+    int last = (k < a+b || k % 2 == 1 || a == b+2 ? k : k-1);
+    for (int i = 0, j = 1 ; j < last ; j++,i=j/2) { 
+        // zip x with y and use two rows of comparators: first y[i] : x[i+2], then y[i] : x[i+1] 
+	Formula ret;
+        if (j %2 == 0)    // new x[i] = min( max(y[i-1], x[i+1]), min(y[i-2], x[i]) )
+            if (ineq < 0) //  = (x[i] && y[i-1]) || (x[i+1] && y[i-2]), encoded as 2 clauses
+                ret = x(i) && y(i-1), ret |= x(i+1) && y(i-2);
+            else          // = x[i] && y[i-2] && (x[i+1] || y[i-1]),    encoded as 3 clauses
+                ret = x(i) && y(i-2), ret &= x(i+1) || y(i-1);
+        else              // new y[i] = max( max(y[i], x[i+2]), min(y[i-1], x[i+1]) )
+            if (ineq < 0) // = y[i] || x[i+2] || y[i-1] && x[i+1],      encoded as 3 clauses
+                ret = y(i) || x(i+2), ret |= x(i+1) && y(i-1);
+            else          // = (x[i+1] || y[i]) && (x[i+1] || y[i-1]),  encoded as 2 clauses
+                ret = x(i+1) || y(i), ret &= x(i+2) || y(i-1); 
+        outvars.push(ret);
     }
     if (k % 2 == 0 && k == a+b && a != b+2)
         outvars.push(a == b ? y[b-1] : x[a-1]);
+#undef x
+#undef y
 }
 
 static inline bool preferDirectMerge(unsigned n, unsigned k) {

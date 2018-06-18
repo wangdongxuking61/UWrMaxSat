@@ -30,6 +30,7 @@ Formula convertToBdd   (const Linear& c, int max_cost = INT_MAX);   // From: PbS
 bool PbSolver::convertPbs(bool first_call)
 {
     vec<Formula>    converted_constrs;
+    ConvertT saved_opt_convert = opt_convert;
 
     if (first_call){
         findIntervals();
@@ -79,12 +80,11 @@ bool PbSolver::convertPbs(bool first_call)
                     else converted_constrs.push(result);
                 }
             } else assert(false);
+            opt_convert = saved_opt_convert;
         } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
-	    FEnv::clear(); i=-1;
-	    if (opt_convert != ct_Adders) {
-                opt_convert = ct_Adders;
-                continue;
-            } else {
+	    FEnv::pop(); i-=1;
+	    if (opt_convert != ct_Adders)  { opt_convert = ct_Adders; continue; }
+            else {
 	        reportf("Out of memery in converting constraints: %s\n",ba.what());
 	        exit(1); //throw(std::bad_alloc);
 	    }
@@ -100,7 +100,12 @@ bool PbSolver::convertPbs(bool first_call)
     constrs.clear();
     mem.clear();
 
-    clausify(sat_solver, converted_constrs);
+    try { // M. Piotrow 15.06.2018
+      clausify(sat_solver, converted_constrs);
+    } catch (std::bad_alloc& ba) { // M. Piotrow 15.06.2018
+      reportf("Out of memery in converting constraints: %s\n",ba.what());
+      exit(1);
+    }
     
     return okay();
 }

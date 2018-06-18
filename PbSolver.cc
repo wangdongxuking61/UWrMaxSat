@@ -560,8 +560,7 @@ void PbSolver::solve(solve_Command cmd)
         reportf("Exporting CNF to: \b%s\b\n", opt_cnf),
         sat_solver.toDimacs(opt_cnf),
         exit(0);
-    if (opt_verbosity >= 1)
-        sat_solver.printVarsCls();
+
     pb_solver = this;
     signal(SIGINT, SIGINT_interrupt);
     signal(SIGXCPU,SIGINT_interrupt);
@@ -584,6 +583,8 @@ void PbSolver::solve(solve_Command cmd)
         try_lessthan = (UB_goalvalue + LB_goalvalue)/2;
         if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))  assump_ps.push(assump_lit), convertPbs(false);
     }
+    if (opt_verbosity >= 1)
+        sat_solver.printVarsCls();
 
     while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }

@@ -26,6 +26,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define ENV FEnv
 #define FML Formula
 #define UNDEF_INDEX -2
+#define MAX_INDEX 0X7FFFFFF
 
 #include "Map.h"
 #include "VecMaps.h"
@@ -173,6 +174,7 @@ macro ENV::NodeData FA_newData(bool isCarry, FML FA_x, FML FA_y, FML FA_c) {
 namespace ENV {
     macro FML new_helper(ENV::NodeData node, bool sign) {
         int index = ENV::nodes.size();
+        if (index > MAX_INDEX) { std::bad_alloc ba; throw(ba); } // M. Piotrow 15.06.2018
         ENV::nodes.push(node);
         return ENV::Comp_new(index, sign); }
 
@@ -180,6 +182,7 @@ namespace ENV {
         int index;
         if (!uniqueness_table.peek(node, index)){
             index = ENV::nodes.size();
+            if (index > MAX_INDEX) { std::bad_alloc ba; throw(ba); } // M. Piotrow 15.06.2018
             ENV::nodes.push(node);
             uniqueness_table.set(node, index); }
         return ENV::Comp_new(index, sign); }
