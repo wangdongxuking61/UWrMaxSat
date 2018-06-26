@@ -182,34 +182,6 @@ Lit Clausifier::polarityClausify(Formula f)
                 clause( result,  c, nb);
                 clause(na, nb,  result);
             }
-        }else if (ITEn_p(f)){
-	  if (!sign(f)){
-	    Lit  c = polarityClausify( cond(f));
-	    Lit  a = polarityClausify( tt  (f));
-	    Lit  b = polarityClausify( ff  (f));
-	    clause(~result,  a);
-	    clause(~result,  c,  b);
-	  }else{
-	    Lit nc = polarityClausify(~cond(f));
-	    Lit na = polarityClausify(~tt  (f));
-	    Lit nb = polarityClausify(~ff  (f));
-	    clause( result, nb);
-	    clause( result, nc, na);
-	  }
-        }else if (ITEp_p(f)){
-	  if (!sign(f)){
-	    Lit nc = polarityClausify(~cond(f));
-	    Lit  a = polarityClausify( tt  (f));
-	    Lit  b = polarityClausify( ff  (f));
-	    clause(~result,  b);
-	    clause(~result,  nc,  a);
-	  }else{
-	    Lit  c = polarityClausify( cond(f));
-	    Lit na = polarityClausify(~tt  (f));
-	    Lit nb = polarityClausify(~ff  (f));
-	    clause( result, na);
-	    clause( result, c, nb);
-	  }
         }else{
             assert(FA_p(f));
             if (isCarry(f)){
@@ -302,14 +274,6 @@ Lit Clausifier::basicClausify(Formula f)
             Lit c = basicClausify(cond(f));
             Lit a = basicClausify(tt  (f));
             Lit b = basicClausify(ff  (f));
-	    /*
-	    if(opt_convert_bdd_monotonic) {
-	      clause(~p,  a);
-	      clause(~p,  c,  b);
-	      clause( p, ~b);
-	      clause( p, ~c, ~a);
-	    } else {
-	    */
 	    clause(~p, ~c,  a);
 	    clause(~p,  c,  b);
 	    clause( p, ~c, ~a);
@@ -318,22 +282,6 @@ Lit Clausifier::basicClausify(Formula f)
 	    // not neccessary !!
 	    clause(~a, ~b,  p);
 	    clause( a,  b, ~p);
-        }else if (ITEn_p(f)){
-            Lit c = basicClausify(cond(f));
-            Lit a = basicClausify(tt  (f));
-            Lit b = basicClausify(ff  (f));
-	    clause(~p,  a);
-	    clause(~p,  c,  b);
-	    clause( p, ~b);
-	    clause( p, ~c, ~a);
-        }else if (ITEp_p(f)){
-            Lit c = basicClausify(cond(f));
-            Lit a = basicClausify(tt  (f));
-            Lit b = basicClausify(ff  (f));
-	    clause(~p,  b);
-	    clause(~p, ~c,  a);
-	    clause( p, ~a);
-	    clause( p,  c, ~b);
         }else{
             assert(FA_p(f));
 

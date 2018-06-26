@@ -27,115 +27,65 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define lit2fml(p) id(var(var(p)),sign(p))
 
 static
-Pair<Pair<Interval<Int>,Interval<Int> >, Formula> 
-buildBDD_i(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, int size, Int sum, Int material_left,
-	   vec<std::map<Pair< Interval<Int> , Interval<Int> >, Formula> > &memo, int max_cost)
+Formula convertOneToBdd(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, int max_cost)
 {
-    Int lower_limit = (lo == Int_MIN) ? Int_MIN : lo - sum;
-    Int upper_limit = Int_MAX;
-    // lo - sum <= (Cs[0]*ps[0] + ... + Cs[size-1]*ps[size-1]) <= hi - sum
+    FEnv::push();
 
-    if (FEnv::topSize() > max_cost)
-      return Pair_new(Pair_new(Interval_new(lower_limit,lower_limit),
-                               Interval_new(upper_limit,upper_limit) ),
-                      _undef_);     // (mycket elegant!)
+    int size = Cs.size(), last;
+    vec<Int>   material_left(size+1);
+    vec<Pair<Interval<Int>, Formula> >     ttf(size+1);
+    vec<std::map<Interval<Int>, Formula> > memo(size+1);
+    Pair<Interval<Int>, Formula> tt, ff, result;
+    const Int zero = 0; Int sum = 0;
 
-    if ((lower_limit <= 0 && upper_limit >= material_left) || lower_limit > material_left || upper_limit < 0) {
-      Interval<Int> lower_interval;
-      Interval<Int> upper_interval;
-      Formula fm;  Int zero = 0;  Int minus_one = -1; 
+    for (int i = 0; i < ttf.size(); i++) ttf[i].snd = _undef_;
+    material_left[0] = 0;
+    for (int i = 1; i < material_left.size(); i++)  material_left[i] = material_left[i-1] +  Cs[i-1];
+    last = size;
+    do {
+        // lo - sum[last] <= (Cs[0]*ps[0] + ... + Cs[last-1]*ps[last-1])
+        Int lower_limit = lo - sum;
 
-      if (lower_limit <= 0)
-        lower_interval = Interval_new(Int_MIN,zero);
-      else
-        lower_interval = Interval_new(material_left + 1, Int_MAX); 
-
-      if (upper_limit >= 0)
-        upper_interval = Interval_new(material_left, Int_MAX);
-      else
-        upper_interval = Interval_new(Int_MIN, minus_one);
-
-      if (lower_limit <= 0 && upper_limit >= material_left)
-        fm = _1_ ;
-      else 
-        fm = _0_ ;
-      return Pair_new( Pair_new(lower_interval,upper_interval), fm);
-    }
-
-    Pair<Pair<Interval<Int>,Interval<Int> >, Formula> result;
-    Pair<Interval<Int>,Interval<Int> > intervals
-      = Pair_new(Interval_new(lower_limit,lower_limit),
-     Interval_new(upper_limit,upper_limit));
-
-    Formula fm;
-    auto search = memo[size].find(intervals);
+        if (FEnv::topSize() > max_cost) {
+            FEnv::pop();
+            return _undef_;
+        }
+        if (lower_limit <= 0)
+            result = Pair_new( Interval_new(Int_MIN,zero), _1_);
+        else if (lower_limit > material_left[last])
+            result = Pair_new( Interval_new(material_left[last] + 1, Int_MAX), _0_);
+        else {
+            assert(last > 0);
+            auto search = memo[last].find(Interval_new(lower_limit,lower_limit));
     
-    if (search == memo[size].end()) {
-      assert(size > 0);
-      size--;
-      material_left -= Cs[size];
+            if (search == memo[last].end()) {
+                sum += Cs[--last];
+                continue;                                         // continue with computing the tt child node
+             } else result = Pair_new(search->first, search->second);
+        }
+        do {
+            if (ttf[last].snd == _undef_) {
+               ttf[last] = result;
+               sum -= Cs[last];
+               break;                                             // continue with computing the ff child node
+            }
+            tt = ttf[last]; ff = result; ttf[last].snd = _undef_; // both children (tt and ff) are available with their intervals
 
-      Pair< Pair< Interval<Int>, Interval<Int> >, Formula> 
-      tt = buildBDD_i(ps, Cs, lo, hi, size, sum + Cs[size], material_left, memo, max_cost);
-      if (tt.snd == _undef_) // return _undef_;
-        return tt;
+            Int tt_beta = tt.fst.fst, tt_gamma = tt.fst.snd;      // [beta, gamma] is a corresponding interval
+            Int ff_beta = ff.fst.fst, ff_gamma = ff.fst.snd;
 
-      Pair< Pair< Interval<Int>, Interval<Int> >, Formula> 
-      ff = buildBDD_i(ps, Cs, lo, hi, size, sum, material_left, memo, max_cost);
-      if (ff.snd == _undef_) //return _undef_;
-        return ff;
+            Interval<Int> interval = Interval_new(max(tt_beta.add(Cs[last]),ff_beta), min(tt_gamma.add(Cs[last]),ff_gamma));
+            Formula fm = (tt.snd == ff.snd ? tt.snd : ITE(lit2fml(ps[last]), tt.snd, ff.snd));
 
-      Int tt_lo_beta = tt.fst.fst.fst, tt_lo_gamma = tt.fst.fst.snd;
-      Int ff_lo_beta = ff.fst.fst.fst, ff_lo_gamma = ff.fst.fst.snd;
-      Int tt_hi_beta = tt.fst.snd.fst, tt_hi_gamma = tt.fst.snd.snd;
-      Int ff_hi_beta = ff.fst.snd.fst, ff_hi_gamma = ff.fst.snd.snd;
-
-      intervals = Pair_new(Interval_new(max(tt_lo_beta.add(Cs[size]),ff_lo_beta), min(tt_lo_gamma.add(Cs[size]),ff_lo_gamma)),
-        Interval_new(max(tt_hi_beta.add(Cs[size]),ff_hi_beta), min(tt_hi_gamma.add(Cs[size]),ff_hi_gamma)));
-
-      if(tt.snd != ff.snd) {
-        //if(!opt_convert_bdd_monotonic)
-        //  fm = ITE(lit2fml(ps[size]), tt.snd, ff.snd);
-        /*else*/if(intervals.snd.snd == Int_MAX)
-          fm = ITEn(lit2fml(ps[size]), tt.snd, ff.snd);
-        else if(intervals.fst.fst == Int_MIN)
-          fm = ITEp(lit2fml(ps[size]), tt.snd, ff.snd);
-        else          // only negative side NOW ##
-          fm = ITE(lit2fml(ps[size]), tt.snd, ff.snd);
-      } else fm = tt.snd;
-
-      memo[size+1][intervals] = fm;
-      result = Pair_new(intervals, fm);
-    } else {
-      result = Pair_new(search->first, search->second);
-    }
-
-    return result;
-}
-
-// New school: Use the new 'ITE' construction of the formula environment 'FEnv'.
-//
-Formula convertToBdd_one(vec<Lit>& ls, vec<Int>& Cs, Int lo, Int hi, int max_cost)
-{
-  Int sum = 0;
-  Formula ret;
-
-  for (int j = 0; j < ls.size(); j++) sum += Cs[j];
-
-  FEnv::push();
-
-  vec<std::map<Pair< Interval<Int> , Interval<Int> >,  Formula> > memo(Cs.size()+1);
-  ret = buildBDD_i(ls, Cs, lo, hi, Cs.size(), 0, sum, memo, max_cost).snd;
-
-  if (ret == _undef_)
-    FEnv::pop();
-  else {
+            memo[++last][interval] = fm;                          // continue with the parent node
+            result = Pair_new(interval, fm);
+        } while (last < size);
+    } while (last < size);
     if (opt_verbosity >= 1)
       /**/ reportf("BDD-cost:%5d\n", FEnv::topSize());
-    FEnv::keep();
-  }
 
-  return ret;
+    FEnv::keep();
+    return result.snd;
 }
 
 Formula convertToBdd(const Linear& c, int max_cost)
@@ -148,14 +98,14 @@ Formula convertToBdd(const Linear& c, int max_cost)
   for (int j = 0; j < c.size; j++)
     ls.push(c[j]), Cs.push(c(j)), csum += c(j);
 
-    ret = convertToBdd_one(ls, Cs, c.lo, Int_MAX, max_cost);    
+    ret = convertOneToBdd(ls, Cs, c.lo, max_cost);    
     if(ret == _undef_ ) return ret;
 
     if(c.hi != Int_MAX) {
       ls.clear(); Cs.clear();
       for(int i=0; i<c.size; i++)
         ls.push(~c[i]), Cs.push(c(i));
-      ret &= convertToBdd_one(ls, Cs, csum - c.hi, Int_MAX, max_cost);
+      ret &= convertOneToBdd(ls, Cs, csum - c.hi, max_cost);
     }
 
   return ret == _undef_ || c.lit == lit_Undef ? ret : ~lit2fml(c.lit) | ret ;

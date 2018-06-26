@@ -25,7 +25,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #define ENV FEnv
 #define FML Formula
-#define UNDEF_INDEX -2
+#define UINT28_MAX 0xFFFFFFF
+#define UNDEF_INDEX (UINT28_MAX-1)
+#define MAX_INDEX   (UINT28_MAX-4)
 
 #include "Map.h"
 #include "VecMaps.h"
@@ -74,8 +76,8 @@ macro FML   id    (FML f, bool sign) { return FML((unsigned)f ^ ((unsigned)sign 
 
 macro bool  sign  (FML f) { return ((unsigned)f & 8) != 0; }
 macro bool  compo (FML f) { return ((unsigned)f & 4) != 0; }
-macro int   index (FML f) { return (int)(unsigned)f >> 4;  }
-macro int   sindex(FML f) { return (int)(unsigned)f >> 3;  }
+macro int   index (FML f) { return (unsigned)f >> 4;  }
+macro int   sindex(FML f) { return (unsigned)f >> 3;  }
 
 macro FML FormulaC(int index, bool sign = false) { return FML(true , index, sign); }
 macro FML FormulaA(int index, bool sign = false) { return FML(false, index, sign); }
@@ -93,12 +95,7 @@ namespace ENV {
 #define tag_ITE  1
 #define tag_FA   2
 
-#define dtag_ITE  0 
-#define dtag_ITEn 1   // reverse monotonice IfThenElse
-#define dtag_ITEp 2   // monotonic IfThenElse
-
 macro int ctag(FML f    ) { return (int)(ENV::nodes[index(f)].data0 & 3); }
-macro int dtag(FML f    ) { return (int)(ENV::nodes[index(f)].data1 & 3); }
 macro int ctag(int index) { return (int)(ENV::nodes[index   ].data0 & 3); }
 macro int tag (FML f    ) { return compo(f) ? ctag(f) : tag_Atom; }
 
@@ -106,8 +103,7 @@ macro bool Atom_p(FML f) { return !compo(f); }
 macro bool Bin_p (FML f) { return tag(f) == tag_Bin; }
 macro bool ITE_p (FML f) { return tag(f) == tag_ITE; }
 macro bool FA_p  (FML f) { return tag(f) == tag_FA; }
-macro bool ITEn_p (FML f) { return tag(f) == tag_ITE && dtag(f) == dtag_ITEn; }
-macro bool ITEp_p (FML f) { return tag(f) == tag_ITE && dtag(f) == dtag_ITEp; }
+
 //-------------------------------------------------------------------------------------------------
 
 macro Op   op     (FML f) { return (Op)(ENV::nodes[index(f)].data1 & 0x3); }
@@ -141,7 +137,6 @@ macro ENV::NodeData ITE_newData(FML cond, FML tt, FML ff) {
     return ENV::NodeData(tag_ITE | (unsigned)cond, (unsigned)tt, (unsigned)ff);
 }
 
-
 macro ENV::NodeData FA_newData(bool isCarry, FML FA_x, FML FA_y, FML FA_c) {
   #ifdef PARANOID
     assert((unsigned)isCarry < 0x2U);
@@ -152,27 +147,10 @@ macro ENV::NodeData FA_newData(bool isCarry, FML FA_x, FML FA_y, FML FA_c) {
     return ENV::NodeData(tag_FA | (unsigned)FA_x, (unsigned)isCarry | (unsigned)FA_y, (unsigned)FA_c);
 }
 
-macro ENV::NodeData ITEn_newData(FML cond, FML tt, FML ff) {
-  #ifdef PARANOID
-    assert(((unsigned)cond & 0x3) == 0);
-    assert(((unsigned)tt & 0x3) == 0);
-    assert(((unsigned)ff & 0x3) == 0);
-  #endif
-    return ENV::NodeData(tag_ITE | (unsigned)cond, dtag_ITEn | (unsigned)tt, (unsigned)ff);
-}
-
-macro ENV::NodeData ITEp_newData(FML cond, FML tt, FML ff) {
-  #ifdef PARANOID
-    assert(((unsigned)cond & 0x3) == 0);
-    assert(((unsigned)tt & 0x3) == 0);
-    assert(((unsigned)ff & 0x3) == 0);
-  #endif
-    return ENV::NodeData(tag_ITE | (unsigned)cond, dtag_ITEp | (unsigned)tt, (unsigned)ff);
-}
-
 namespace ENV {
     macro FML new_helper(ENV::NodeData node, bool sign) {
         int index = ENV::nodes.size();
+        if (index > MAX_INDEX) { std::bad_alloc ba; throw(ba); } // M. Piotrow 15.06.2018
         ENV::nodes.push(node);
         return ENV::Comp_new(index, sign); }
 
@@ -180,6 +158,7 @@ namespace ENV {
         int index;
         if (!uniqueness_table.peek(node, index)){
             index = ENV::nodes.size();
+            if (index > MAX_INDEX) { std::bad_alloc ba; throw(ba); } // M. Piotrow 15.06.2018
             ENV::nodes.push(node);
             uniqueness_table.set(node, index); }
         return ENV::Comp_new(index, sign); }
@@ -195,16 +174,6 @@ macro FML ITE_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = f
                    : ENV::new_helper (ITE_newData(cond, tt, ff), sign); }
 macro FML ITE_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITE_new(cond, tt, ff, sign, true); }
 
-macro FML ITEn_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = false) {
-    return sharing ? ENV::newS_helper(ITEn_newData(cond, tt, ff), sign)
-                   : ENV::new_helper (ITEn_newData(cond, tt, ff), sign); }
-macro FML ITEn_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITEn_new(cond, tt, ff, sign, true); }
-
-macro FML ITEp_new (FML cond, FML tt, FML ff, bool sign = false, bool sharing = false) {
-    return sharing ? ENV::newS_helper(ITEp_newData(cond, tt, ff), sign)
-                   : ENV::new_helper (ITEp_newData(cond, tt, ff), sign); }
-macro FML ITEp_newS(FML cond, FML tt, FML ff, bool sign = false) { return ITEp_new(cond, tt, ff, sign, true); }
-
 macro FML FA_new (bool isCarry, FML FA_x, FML FA_y, FML FA_c, bool sign = false, bool sharing = false) {
     return sharing ? ENV::newS_helper(FA_newData(isCarry, FA_x, FA_y, FA_c), sign)
                    : ENV::new_helper (FA_newData(isCarry, FA_x, FA_y, FA_c), sign); }
@@ -212,8 +181,8 @@ macro FML FA_newS(bool isCarry, FML FA_x, FML FA_y, FML FA_c, bool sign = false)
 
 //-------------------------------------------------------------------------------------------------
 
-#define atom_Undef (-2)
-#define atom_True  (-1)
+#define atom_Undef (UINT28_MAX-1)
+#define atom_True  (UINT28_MAX)
 
 const FML _undef_ = ENV::Atom_new(atom_Undef, false);
 const FML _error_ = ENV::Atom_new(atom_Undef, true );
@@ -225,8 +194,8 @@ macro bool Exeception_p(FML f)     { return index(f) == atom_Undef; }
 macro bool Exeception_p(int index) { return index    == atom_Undef; }
 macro bool Const_p     (FML f)     { return index(f) == atom_True; }
 macro bool Const_p     (int index) { return index    == atom_True; }
-macro bool Var_p       (FML f)     { return index(f) >= 0; }
-macro bool Var_p       (int index) { return index    >= 0; }
+macro bool Var_p       (FML f)     { return index(f) <= MAX_INDEX; }
+macro bool Var_p       (int index) { return index    <= MAX_INDEX; }
 
 // Use indices >= 0 for variables!
 //
@@ -247,7 +216,7 @@ namespace ENV {
 
 namespace ENV {
     template <class T, bool sgn = false>
-    class CompMap : DeckMap<T> {
+    class CompMap : public DeckMap<T> {
         int     offset;
     public:
         typedef FML Key;
@@ -357,7 +326,7 @@ macro Formula FAc(Formula x, Formula y, Formula c)      // x + y + c >= 2
 }
 
 
-macro Formula ITE(Formula c, Formula t, Formula f, bool p = false)
+macro Formula ITE(Formula c, Formula t, Formula f)
 {
     if (c == _0_) return f;
     if (c == _1_) return t;
@@ -368,11 +337,6 @@ macro Formula ITE(Formula c, Formula t, Formula f, bool p = false)
     if (f == _0_ || f ==  c) return  c & t;
     if (f == _1_ || f == ~c) return ~c | t;
 
-    if (p) {
-        if(sign(c)) return ITEp_newS(~c, ~f, ~t, true);
-        else        return ITEp_newS(c, t, f);
-    }
-
     if (t < f)
         swp(t, f),
         c = ~c;
@@ -380,8 +344,6 @@ macro Formula ITE(Formula c, Formula t, Formula f, bool p = false)
     return ITE_newS(c, id(t,sign(f)), unsign(f), sign(f));
 }
 
-macro Formula ITEp(Formula c, Formula t, Formula f) { return ITE(c, t, f, true); }
-macro Formula ITEn(Formula c, Formula t, Formula f) { return ITE(~c, f, t, true); }
 
 //-------------------------------------------------------------------------------------------------
 

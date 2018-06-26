@@ -83,6 +83,7 @@ bool PbSolver::convertPbs(bool first_call)
             opt_convert = saved_opt_convert;
         } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
 	    FEnv::pop(); i-=1;
+	    if (opt_convert == ct_Sorters)  { opt_convert = ct_BDDs; continue; }
 	    if (opt_convert != ct_Adders)  { opt_convert = ct_Adders; continue; }
             else {
 	        reportf("Out of memery in converting constraints: %s\n",ba.what());
