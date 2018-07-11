@@ -34,7 +34,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 //=================================================================================================
 // Command line options:
 
-
+bool     opt_maxsat    = false;
 bool     opt_satlive   = true;
 bool     opt_ansi      = true;
 char*    opt_cnf       = NULL;
@@ -61,7 +61,7 @@ int      opt_mem_lim       = INT32_MAX;
 
 int      opt_minimization  = 2; // 0 = sequential. 1 = alternating, 2 - binary
 int      opt_seq_thres     = 96;
-int      opt_bin_coeff    = 3;
+int      opt_bin_percent   = 65;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -110,6 +110,7 @@ cchar* doc =
 
     "\n"
     "Input options:\n"
+    "  -m -maxsat    Use the MaxSAT input file format (wcnf).\n"
     "  -of -old-fmt  Use old variant of OPB file format.\n"
     "\n"
     "Output options:\n"
@@ -174,6 +175,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-goal="     ,   6) == 0) opt_goal       = atoi(arg+ 6);  // <<== real bignum parsing here
             else if (strncmp(arg, "-cnf="      ,   5) == 0) opt_cnf        = arg + 5;
             else if (strncmp(arg, "-base-max=",   10) == 0) opt_base_max   = atoi(arg+10); 
+            else if (strncmp(arg, "-bin-split=",  11) == 0) opt_bin_percent= atoi(arg+11); 
             //(end)
 
             else if (oneof(arg, "1,first"   )) opt_command = cmd_FirstSolution;
@@ -188,6 +190,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "bin"       )) opt_minimization =  2;
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
+            else if (oneof(arg, "m,maxsat"  )) opt_maxsat  = true;
 
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;
@@ -197,8 +200,6 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "v2"        )) opt_verbosity = 2;
             else if (strncmp(arg, "-sa", 3 ) == 0) {
                 if (arg[3] == '2') opt_shared_fmls = true;
-                //if (arg[3] >= '1' && arg[3] <= '5') opt_sort_alg = arg[3]-'0';
-                //if (arg[3] != '\0' && arg[4] >= '1' && arg[4] <= '5') opt_sort_alg2 = arg[4]-'0';
             }
             else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
@@ -273,7 +274,8 @@ void outputResult(const PbSolver& S, bool optimum = true)
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         printf("v");
         for (int i = 0; i < S.best_model.size(); i++)
-            printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
+            if (S.index2name[i][0] != '#')
+                printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
         printf("\n");
     }
     fflush(stdout);
@@ -366,7 +368,10 @@ int main(int argc, char** argv)
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
-    parse_PB_file(opt_input, *pb_solver, opt_old_format);
+    if (opt_maxsat)
+        parse_WCNF_file(opt_input, *pb_solver);
+    else
+        parse_PB_file(opt_input, *pb_solver, opt_old_format);
 
     pb_solver->solve(convert(opt_command));
 

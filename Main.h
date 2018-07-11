@@ -30,6 +30,7 @@ enum ConvertT { ct_Sorters, ct_Adders, ct_BDDs, ct_Mixed, ct_Undef };
 enum Command  { cmd_Minimize, cmd_FirstSolution, cmd_AllSolutions };
 
 // -- output options:
+extern bool     opt_maxsat;
 extern bool     opt_satlive;
 extern bool     opt_ansi;
 extern char*    opt_cnf;
@@ -51,7 +52,7 @@ extern bool     opt_shared_fmls;
 extern int      opt_base_max;
 extern int      opt_minimization;
 extern int      opt_seq_thres;
-extern int      opt_bin_coeff;
+extern int      opt_bin_percent;
 
 // -- files:
 extern char*    opt_input;

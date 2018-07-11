@@ -574,7 +574,7 @@ void PbSolver::solve(solve_Command cmd)
     if (goal != NULL)
         for (int i = 0; i < goal_Cs.size(); ++i)
             if (value(goal_ps[i]) != l_Undef) {
-                if (sign(goal_ps[i]) && value(goal_ps[i]) == l_False || !sign(goal_ps[i]) && value(goal_ps[i]) == l_True)
+                if (value(goal_ps[i]) == l_True)
                     LB_goalvalue += goal_Cs[i], UB_goalvalue += goal_Cs[i];
 	    } else if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
             else UB_goalvalue += goal_Cs[i];
@@ -603,7 +603,8 @@ void PbSolver::solve(solve_Command cmd)
             for (Var x = 0; x < pb_n_vars; x++){
                 assert(sat_solver.model[x] != l_Undef);
                 ban.push(mkLit(x, sat_solver.model[x] == l_True));
-                reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
+                if (index2name[x][0] != '#')
+                    reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
             }
             reportf("\n");
             sat_solver.addClause_(ban);
@@ -630,7 +631,7 @@ void PbSolver::solve(solve_Command cmd)
             } else {
                 Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
 
-                try_lessthan = (LB_goalvalue + (best_goalvalue+1)*(opt_bin_coeff-1))/opt_bin_coeff;
+                try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 
                 if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
                     break; // unsat
@@ -655,7 +656,7 @@ void PbSolver::solve(solve_Command cmd)
 	} else {
 	  Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
 
-	  try_lessthan = (LB_goalvalue + (best_goalvalue+1)*(opt_bin_coeff-1))/opt_bin_coeff;
+	  try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 
 	  if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))
 	    break; // unsat

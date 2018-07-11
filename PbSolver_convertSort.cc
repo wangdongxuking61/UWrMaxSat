@@ -314,6 +314,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     for (int i = 0; i < c.size; i++) sum += c(i);
     /*negate = c.hi != Int_MAX && c.hi > sum/2 && (c.lo == Int_MIN || sum - c.lo < c.hi) || 
              c.lo != Int_MIN && c.lo > sum/2;    */
+    negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2;
     if (negate)
         lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi,
 	hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;

@@ -33,7 +33,7 @@ bool PbSolver::convertPbs(bool first_call)
     ConvertT saved_opt_convert = opt_convert;
 
     if (first_call){
-        findIntervals();
+        if (!opt_maxsat) findIntervals();
         if (!rewriteAlmostClauses()) {
             sat_solver.addEmptyClause();
             return false;

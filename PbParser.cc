@@ -100,7 +100,8 @@ static void skipLine(B& in) {
 
 template<class B>
 static void skipComments(B& in) {      // skip comment and empty lines (assuming we are at beginning of line)
-    while (*in == '*' || *in == '\n') skipLine(in); }
+    char start = (opt_maxsat ? 'c' : '*');
+    while (*in == start || *in == '\n') skipLine(in); }
 
 template<class B>
 static bool skipEndOfLine(B& in) {     // skip newline AND trailing comment/empty lines
@@ -265,6 +266,95 @@ bool parseConstrs(B& in, S& solver, bool old_format)
     return true;
 }
 
+template<class B, class S>
+static void parse_p_line(B& in, S& solver, bool& wcnf_format, Int& hard_bound)
+{
+    int n_vars, n_constrs;
+    vec<char> tmp(15,0);
+
+    skipComments(in);
+
+    if (*in != 'p') return;
+    ++in;
+    skipWhitespace(in);
+
+    if (!skipText(in, "wcnf")) {
+        wcnf_format = false;
+        if (!skipText(in, "cnf")) goto Abort;
+    }
+    n_vars = toint(parseInt(in));
+
+    n_constrs = toint(parseInt(in));
+
+    skipWhitespace(in);
+    if (*in >= '0' && *in <= '9' || *in == '+') 
+        hard_bound = parseInt(in);
+
+    solver.allocConstrs(n_vars, n_constrs);
+    for (int i = 1; i <= n_vars; i++) {
+        sprintf(&tmp[0], "%d", i);
+        solver.getVar(tmp);
+    }
+  Abort:
+    skipLine(in);
+    skipComments(in);
+}
+
+template<class B>
+static bool parseLit(B& in, vec<char>& tmp) {   // 'tmp' is cleared, then filled with the parsed string.
+    bool negated = false;
+    skipWhitespace(in);
+    if (*in == '-') negated = true, ++in;
+    if (*in < '0' || *in > '9') throw nsprintf("Expected start of var number, not: %c(%d)", *in, *in);
+    tmp.clear();
+    tmp.push(*in);
+    ++in;
+    while (*in >= '0' && *in <= '9') tmp.push(*in), ++in;
+    tmp.push(0);
+    return negated; }
+
+template<class B, class S>
+static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
+{
+    vec<Lit> ps, gps; vec<Int> Cs, gCs; vec<char> tmp;
+    int    gvars = 0;
+    Int one = 1, weight;
+    while (*in != EOF){
+        weight = (wcnf_format ? parseInt(in) : 1);
+        while (1) {
+            bool negated = parseLit(in,tmp);
+            if (tmp.size() == 2 && tmp[0] == '0') break; 
+            ps.push(mkLit(solver.getVar(tmp), negated)); Cs.push(one);
+        }
+        skipEndOfLine(in);
+        if (ps.size() == 1) {
+            if (weight < hard_bound) gvars++,gps.push(~ps.last()), gCs.push(weight);
+            else if (!solver.addConstr(ps, Cs, one, 1, lit_Undef))
+                return false;
+        } else {
+            if (weight < hard_bound) {
+                gvars++;
+                tmp.clear(); tmp.growTo(15,0);
+                sprintf(&tmp[0],"#%d",gvars);
+                ps.push(mkLit(solver.getVar(tmp))); gps.push(ps.last());
+                Cs.push(one);                       gCs.push(weight);
+            }
+            if (!solver.addConstr(ps, Cs, one, 1, lit_Undef))
+                return false;
+        }
+        ps.clear();
+        Cs.clear();
+    }
+    if (gvars == 0) {
+        tmp.clear(); tmp.growTo(15,0);
+        sprintf(&tmp[0],"#%d",1);
+        gps.push(mkLit(solver.getVar(tmp)));
+        gCs.push(one);
+    }
+    solver.addGoal(gps, gCs);
+    return true;
+}
+
 
 //=================================================================================================
 // Main parser functions:
@@ -296,6 +386,34 @@ static bool parse_PB(B& in, S& solver, bool old_format, bool abort_on_error)
 void parse_PB_file(cchar* filename, PbSolver& solver, bool old_format, bool abort_on_error) {
     FileBuffer buf(filename);
     parse_PB(buf, solver, old_format, abort_on_error); }
+
+// WCNF parse functions
+//
+template<class B, class S>
+static bool parse_WCNF(B& in, S& solver, bool abort_on_error)
+{
+    Int hard_bound = Int_MAX;
+    bool wcnf_format = true;
+
+    try{
+        parse_p_line(in, solver, wcnf_format, hard_bound);
+        return parse_wcnfs(in, solver, wcnf_format, hard_bound);
+    }catch (cchar* msg){
+        if (abort_on_error){
+            reportf("PARSE ERROR! [line %d] %s\n", in.line, msg);
+            xfree(msg);
+            if (opt_satlive && !opt_try)
+                printf("s UNKNOWN\n");
+            exit(5);
+        }else
+            throw msg;
+    }
+
+}
+
+void parse_WCNF_file(cchar* filename, PbSolver& solver, bool abort_on_error) {
+    FileBuffer buf(filename);
+    parse_WCNF(buf, solver, abort_on_error); }
 
 //=================================================================================================
 // Debug:
