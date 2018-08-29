@@ -29,7 +29,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 #include "minisat/utils/System.h"
 #include "PbSolver.h"
 #include "PbParser.h"
-
+#include "FEnv.h"
 
 //=================================================================================================
 // Command line options:
@@ -176,6 +176,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-cnf="      ,   5) == 0) opt_cnf        = arg + 5;
             else if (strncmp(arg, "-base-max=",   10) == 0) opt_base_max   = atoi(arg+10); 
             else if (strncmp(arg, "-bin-split=",  11) == 0) opt_bin_percent= atoi(arg+11); 
+            else if (strncmp(arg, "-seq-thres=",  11) == 0) opt_seq_thres  = atoi(arg+11);
             //(end)
 
             else if (oneof(arg, "1,first"   )) opt_command = cmd_FirstSolution;
@@ -190,7 +191,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "bin"       )) opt_minimization =  2;
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
-            else if (oneof(arg, "m,maxsat"  )) opt_maxsat  = true;
+            else if (oneof(arg, "m,maxsat"  )) opt_maxsat  = true, opt_seq_thres = 3;
 
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;
@@ -368,12 +369,37 @@ int main(int argc, char** argv)
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
-    if (opt_maxsat)
+    if (opt_maxsat) {
+        Minisat::vec<Lit> assump_ps;
+        vec<Minisat::vec<Lit> > learnt_cls;
         parse_WCNF_file(opt_input, *pb_solver);
-    else
+        Int goal_min = Int_MAX, goal_max = Int_MIN;
+        for (int i = 0; i < pb_solver->goal->size; i++) {
+            Int gi = (*pb_solver->goal)(i);
+            if (gi < goal_min) goal_min = gi; else if (gi > goal_max) goal_max = gi;
+        }
+        if (goal_min == goal_max && pb_solver->goal->size > 100000)
+            pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_command));
+        else 
+            pb_solver->solve(convert(opt_command));
+        //if (pb_solver->goal->size > pb_solver->nVars() / 10 * 9)
+        //if (pb_solver->nConstrs() / 10 > pb_solver->nVars())
+/*        pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_minimization != 1 ? cmd_FirstSolution : opt_command));
+        if (opt_minimization != 1) {
+            Int LB_goalval = pb_solver->LB_goalvalue, UB_goalval = pb_solver->UB_goalvalue;
+            delete pb_solver;
+            pb_solver = new PbSolver(opt_preprocess);
+            FEnv::clear(); FEnv::stack.clear();
+            parse_WCNF_file(opt_input, *pb_solver);
+            pb_solver->LB_goalvalue = LB_goalval; pb_solver->UB_goalvalue = UB_goalval;
+        //if (assump_ps.size() > 0)
+            pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_command));
+        }*/
+        //else pb_solver->solve(convert(opt_command));
+    } else {
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
-
-    pb_solver->solve(convert(opt_command));
+        pb_solver->solve(convert(opt_command));
+    }
 
     if (pb_solver->goal == NULL && pb_solver->best_goalvalue != Int_MAX)
         opt_command = cmd_FirstSolution;    // (otherwise output will be wrong)

@@ -88,7 +88,7 @@ The 'S' (Solver) parameter should implement:
 
 template<class B>
 static void skipWhitespace(B& in) {     // not including newline
-    while (*in == ' ' || *in == '\t')
+    while (*in == ' ' || *in == '\t' || *in == '\r')
         ++in; }
 
 template<class B>

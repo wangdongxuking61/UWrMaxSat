@@ -85,6 +85,7 @@ protected:
 public:
     vec<Linear*>        constrs;        // Vector with all constraints.
     Linear*             goal;           // Non-normalized goal function (used in optimization). NULL means no goal function specified. NOTE! We are always minimizing.
+    Int                 LB_goalvalue, UB_goalvalue; // Lower and upper bounds on the goal value
 protected:
     vec<int>            n_occurs;       // Lit -> int: Number of occurrences.
     vec<vec<int> >      occur;          // Lit -> vec<int>: Occur lists. Left empty until 'setupOccurs()' is called.
@@ -113,8 +114,10 @@ protected:
 public:
     PbSolver(bool use_preprocessing = false) 
                 : goal(NULL)
+                , LB_goalvalue(Int_MIN)
+                , UB_goalvalue(Int_MAX)
                 , propQ_head(0)
-                  //, stats(sat_solver.stats_ref())
+                //, stats(sat_solver.stats_ref())
                 , declared_n_vars(-1)
                 , declared_n_constrs(-1)
                 , best_goalvalue(Int_MAX)
@@ -160,7 +163,8 @@ public:
     bool    okay(void) { return sat_solver.okay(); }
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
-    void    solve(solve_Command cmd = sc_Minimize);    // Returns best/first solution found or Int_MAX if UNSAT.
+    void    solve(solve_Command cmd = sc_Minimize);        // Returns best/first solution found or Int_MAX if UNSAT.
+    void    maxsat_solve(Minisat::vec<Lit>& assump_ps, vec<Minisat::vec<Lit> >& learnt_cls, solve_Command cmd = sc_Minimize); 
 };
 
 

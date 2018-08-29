@@ -306,26 +306,22 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static vec<Int>        Cs;
     static Int lo = Int_MIN, hi = Int_MAX;
     static int lastCost = 0;
+    static bool negate = false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
-    bool lastBaseOK = sizesDiff >= 0, negate = false; // = opt_shared_fmls;    
+    bool lastBaseOK = sizesDiff >= 0;    
     Int sum = 0, oldlo = lo, oldhi = hi;
 
     for (int i = 0; i < c.size; i++) sum += c(i);
     /*negate = c.hi != Int_MAX && c.hi > sum/2 && (c.lo == Int_MIN || sum - c.lo < c.hi) || 
              c.lo != Int_MIN && c.lo > sum/2;    */
-    negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2;
-    if (negate)
-        lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi,
-	hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
-    else lo = c.lo, hi = c.hi;
         
     for (int i = 0, j = 0; lastBaseOK && j < c.size; j++) {
         while (i < Cs.size() && c(j) > Cs[i]) i++;
         if (i == Cs.size() || c(j) < Cs[i]) lastBaseOK = false; else i++;
     }
-    bool lastEncodingOK = lastBaseOK && opt_shared_fmls;
-    Int sumAssigned = 0, tmp_lo = lo, tmp_hi = hi;
+    bool lastEncodingOK = lastBaseOK && opt_shared_fmls && FEnv::stack.size() > 0;
+    Int sumAssigned = 0, sumSetToTrue = 0;
     extern PbSolver *pb_solver;
     int j = 0;
     for (int i = 0; lastEncodingOK && i < ps.size(); i++) {
@@ -333,21 +329,27 @@ Formula buildConstraint(const Linear& c, int max_cost)
         lbool psi_val = pb_solver->value(psi_lit);
         if (j < c.size && psi_lit == (negate ? ~c[j] : c[j]) && Cs[i] == c(j)) j++;
         else if (psi_val != l_Undef) {
-            if (psi_val == l_True) {
-                if (tmp_lo != Int_MIN) tmp_lo += Cs[i];
-                if (tmp_hi != Int_MAX) tmp_hi += Cs[i];
-            }
+            if (psi_val == l_True) sumSetToTrue += Cs[i];
             sumAssigned += Cs[i];
         }
         else lastEncodingOK = false;
     }
     if (j < c.size) lastEncodingOK = false;
+    negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK;
+    if (negate) {
+        lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi;
+        hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
+    } else lo = c.lo, hi = c.hi;
     if (!lastEncodingOK) {
         ps.clear(), Cs.clear();
         for (int j = 0; j < c.size; j++)
 	    ps.push(negate ? neg(lit2fml(c[j])) : lit2fml(c[j])),
             Cs.push(c(j));
-    } else sum += sumAssigned, lo = tmp_lo, hi = tmp_hi;
+    } else {
+        sum += sumAssigned;
+        if (lo != Int_MIN) lo += sumSetToTrue;
+        if (hi != Int_MAX) hi += sumSetToTrue;
+    }
     int      cost;
     static vec<int> base;
     if (!lastBaseOK || !lastEncodingOK && sizesDiff > 0 && 

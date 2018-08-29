@@ -305,7 +305,7 @@ void PbSolver::propagate()
     if (nVars() == 0) return;
     if (occur.size() == 0) setupOccurs();
 
-    if (opt_verbosity >= 1) reportf("  -- Unit propagations: ", constrs.size());
+    if (opt_verbosity >= 2) reportf("  -- Unit propagations: ", constrs.size());
     bool found = false;
 
     while (propQ_head < trail.size()){
@@ -318,13 +318,13 @@ void PbSolver::propagate()
                 int trail_sz = trail.size();
                 if (propagate(*constrs[cs[i]]))
                     constrs[cs[i]] = NULL;
-                if (opt_verbosity >= 1 && trail.size() > trail_sz) found = true, reportf("p");
+                if (opt_verbosity >= 2 && trail.size() > trail_sz) found = true, reportf("p");
                 if (!okay()) return;
             }
         }
     }
 
-    if (opt_verbosity >= 1) {
+    if (opt_verbosity >= 2) {
         if (!found) reportf("(none)\n");
         else        reportf("\n");
     }
@@ -368,7 +368,7 @@ static bool lhsEqc(const Linear& c, const Linear& d) {
 
 void PbSolver::findIntervals()
 {
-    if (opt_verbosity >= 1)
+    if (opt_verbosity >= 2)
         reportf("  -- Detecting intervals from adjacent constraints: ");
 
     bool found = false;
@@ -386,7 +386,7 @@ void PbSolver::findIntervals()
                 if (d.lo < c.lo) d.lo = c.lo;
                 if (d.hi > c.hi) d.hi = c.hi;
                 constrs[i-1] = NULL;
-                if (opt_verbosity >= 1) reportf("=");
+                if (opt_verbosity >= 2) reportf("=");
                 found = true;
             }
             if (lhsEqc(c, d)){
@@ -398,14 +398,14 @@ void PbSolver::findIntervals()
                 if (d.lo < lo) d.lo = lo;
                 if (d.hi > hi) d.hi = hi;
                 constrs[i-1] = NULL;
-                if (opt_verbosity >= 1) reportf("#");
+                if (opt_verbosity >= 2) reportf("#");
                 found = true;
             }
 
             prev = &d;
         }
     }
-    if (opt_verbosity >= 1) {
+    if (opt_verbosity >= 2) {
         if (!found) reportf("(none)\n");
         else        reportf("\n");
     }
@@ -420,7 +420,7 @@ bool PbSolver::rewriteAlmostClauses()
     int         n_splits = 0;
     char        buf[20];
 
-    if (opt_verbosity >= 1)
+    if (opt_verbosity >= 2)
         reportf("  -- Clauses(.)/Splits(s): ");
     for (int i = 0; i < constrs.size(); i++){
         if (constrs[i] == NULL) continue;
@@ -434,7 +434,7 @@ bool PbSolver::rewriteAlmostClauses()
 
         if (n <= 1){
             // Pure clause:
-            if (opt_verbosity >= 1) reportf(".");
+            if (opt_verbosity >= 2) reportf(".");
             found = true;
             ps.clear();
             for (int j = n; j < c.size; j++)
@@ -445,7 +445,7 @@ bool PbSolver::rewriteAlmostClauses()
 
         }else if (c.size-n >= 3){
             // Split clause part:
-            if (opt_verbosity >= 1) reportf("s");
+            if (opt_verbosity >= 2) reportf("s");
             found = true;
             sprintf(buf, "@split%d", n_splits);
             n_splits++;
@@ -474,7 +474,7 @@ bool PbSolver::rewriteAlmostClauses()
         }
     }
 
-    if (opt_verbosity >= 1) {
+    if (opt_verbosity >= 2) {
         if (!found) reportf("(none)\n");
         else        reportf("\n");
     }
@@ -568,9 +568,9 @@ void PbSolver::solve(solve_Command cmd)
     bool    sat = false;
     Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
-    Int     LB_goalvalue = 0, UB_goalvalue = 0;
     int     n_solutions = 0;    // (only for AllSolutions mode)
-    
+
+    LB_goalvalue = 0, UB_goalvalue = 0; 
     if (goal != NULL)
         for (int i = 0; i < goal_Cs.size(); ++i)
             if (value(goal_ps[i]) != l_Undef) {
@@ -617,10 +617,11 @@ void PbSolver::solve(solve_Command cmd)
                 break;
 
             best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
-            if (opt_satlive || opt_verbosity == 0) { printf("o %s\n", toString(best_goalvalue * goal_gcd)); fflush(stdout); }
+            if (opt_satlive || opt_verbosity == 0) { 
+                printf("o %s\n", toString(best_goalvalue * goal_gcd)); fflush(stdout); }
             if (cmd == sc_FirstSolution) break;
 
-            if (opt_verbosity >= 1){
+            if (opt_verbosity >= 1 && !opt_satlive){
                 char* tmp = toString(best_goalvalue * goal_gcd);
                 reportf("\bFound solution: %s\b\n", tmp);
                 xfree(tmp); }
@@ -662,7 +663,9 @@ void PbSolver::solve(solve_Command cmd)
 	    break; // unsat
 
 	  assump_ps.push(assump_lit);
-	} 
+	}
+        if (opt_minimization >= 1 && opt_verbosity >= 2)
+            reportf("Lower bound  = %s\n", toString(LB_goalvalue));
         convertPbs(false);
       }         
     } // END OF LOOP
@@ -684,6 +687,285 @@ void PbSolver::solve(solve_Command cmd)
             xfree(tmp);
        }else{
             char* tmp = toString(best_goalvalue * goal_gcd);
+            reportf("\bOptimal solution: %s\b\n", tmp);
+            xfree(tmp);
+        }
+    }
+}
+
+static Int next_sum(Int bound, const vec<Int>& cs)
+{ // find the smallest sum of a subset of cs that is greater that bound
+    vec<Int> sum[2];
+    Int x, next_min = Int_MAX;
+    int oldv =0, newv = 1, lst = 0;
+
+    sum[oldv].push(0); ++bound;
+    for (int sz = 1, j = 0; j < cs.size(); j++, oldv = newv, newv = 1-oldv, lst = 0) {
+        for (int i = 0; i < sz; i++)
+            if ((x = sum[oldv][i] + cs[j]) < bound) {
+                while (lst < sz && sum[oldv][lst] > x) sum[newv].push(sum[oldv][lst++]);
+                if (lst == sz || sum[oldv][lst] < x) sum[newv].push(x);
+            } else if (x < next_min) {
+                if (x == bound) return x;
+                next_min = x;
+            }
+        while (lst < sz) sum[newv].push(sum[oldv][lst++]);
+        sz = sum[newv].size(); sum[oldv].clear();
+    }
+    return (next_min == Int_MAX ? bound : next_min);
+
+}
+
+void PbSolver::maxsat_solve(Minisat::vec<Lit>& assump_ps, vec<Minisat::vec<Lit> >& learnt_cls, solve_Command cmd)
+{
+    if (!okay()) {
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        return;
+    }
+
+    // Convert constraints:
+    pb_n_vars = nVars();
+    pb_n_constrs = constrs.size();
+    if (opt_verbosity >= 1)
+        reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
+    propagate();
+    if (!convertPbs(true)){
+        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        assert(!okay()); return; 
+    }
+
+    // Freeze goal function variables (for SatELite):
+    if (goal != NULL){
+        for (int i = 0; i < goal->size; i++)
+            sat_solver.setFrozen(var((*goal)[i]), true);
+    }
+
+    // Solver (optimize):
+    //sat_solver.setVerbosity(opt_verbosity);
+    sat_solver.verbosity = opt_verbosity;
+    Int goal_gcd = 1;
+    if (goal != NULL) {
+        goal_gcd = (*goal)(0);
+        for (int i = 1; i < goal->size; ++i) goal_gcd = gcd(goal_gcd, (*goal)(i));
+        if (goal_gcd < 0) goal_gcd = -goal_gcd;
+        if (goal_gcd != 1) {
+            if (LB_goalvalue != Int_MIN) LB_goalvalue /= goal_gcd;
+            if (UB_goalvalue != Int_MAX) UB_goalvalue /= goal_gcd;
+        }
+    }
+
+    assert(best_goalvalue == Int_MAX);
+
+    if (goal != NULL && opt_polarity_sug != 0){
+        for (int i = 0; i < goal->size; i++){
+            bool dir = (*goal)(i)*opt_polarity_sug > 0 ? !sign((*goal)[i]) : sign((*goal)[i]);
+            sat_solver.setPolarity(var((*goal)[i]), /*lbool*/(dir));
+        }
+    }
+
+    if (opt_convert_goal != ct_Undef)
+        opt_convert = opt_convert_goal;
+    opt_sort_thres *= opt_goal_bias;
+    opt_shared_fmls = true;
+
+    if (opt_cnf != NULL)
+        reportf("Exporting CNF to: \b%s\b\n", opt_cnf),
+        sat_solver.toDimacs(opt_cnf),
+        exit(0);
+
+    pb_solver = this;
+    signal(SIGINT, SIGINT_interrupt);
+    signal(SIGXCPU,SIGINT_interrupt);
+
+    vec<Lit> goal_ps;
+    vec<Int> goal_Cs, assump_Cs;
+    bool    sat = false;
+    Minisat::Lit inequality = lit_Undef;
+    Int     try_lessthan = opt_goal;
+    int     n_solutions = 0;    // (only for AllSolutions mode)
+
+    Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
+    if (goal != NULL) {
+        vec<Pair<Lit,Int> > psCs;
+        for (int i = 0; i < goal->size; ++i)
+            if (value((*goal)[i]) != l_Undef) {
+                if (value((*goal)[i]) == l_True) {
+                    fixed_goalval += (*goal)(i);
+                    addUnit((*goal)[i]);
+                } else addUnit(~(*goal)[i]);
+	    } else { 
+                if ((*goal)(i) < 0) LB_goalval += (*goal)(i);
+                else                UB_goalval += (*goal)(i);
+                psCs.push(Pair_new(~(*goal)[i], (*goal)(i)/goal_gcd));
+            }
+        LB_goalval += fixed_goalval, UB_goalval += fixed_goalval;
+        if (goal_gcd != 1) LB_goalval /= goal_gcd, UB_goalval /= goal_gcd, fixed_goalval /= goal_gcd;
+        sort(psCs);
+        if (UB_goalvalue == Int_MAX) {
+            for (int i = 0; i < psCs.size(); i++) 
+                assump_ps.push(psCs[i].fst), assump_Cs.push(psCs[i].snd);
+            UB_goalvalue = UB_goalval;
+        } else {
+            for (int i = 0, j = 0; i < psCs.size(); i++)
+                if (j < assump_ps.size() && assump_ps[j] == psCs[i].fst) 
+                    assump_Cs.push(psCs[i].snd), j++;
+                else goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
+            try_lessthan = ++UB_goalvalue;
+            if (goal_ps.size() > 0) {
+                if (assump_ps.size() > 0) inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+                addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, inequality);
+                if (inequality != lit_Undef) assump_ps.push(inequality);
+                convertPbs(false);
+            }
+        }
+        if (LB_goalvalue < LB_goalval) LB_goalvalue = LB_goalval;
+    }
+    for (int i = 0; i < learnt_cls.size(); i++) sat_solver.addClause(learnt_cls[i]);
+    learnt_cls.clear();
+
+    if (opt_verbosity >= 1)
+        sat_solver.printVarsCls();
+
+    while (1) {
+      if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
+//printf("Lb = %s, UB = %s, try = %s, fix = %s, ps.sz = %i, ass.sz = %i\n", toString(LB_goalvalue), toString(UB_goalvalue), toString(try_lessthan), toString(fixed_goalval), goal_ps.size(), assump_ps.size());
+      if (sat_solver.solve(assump_ps)) { // SAT returned
+        if(assump_ps.size() > 0 && assump_ps.last() == inequality) {
+          addUnit(inequality);
+          assump_ps.pop(); inequality = lit_Undef;
+        }
+        sat = true;
+
+        if (cmd == sc_AllSolutions){
+            Minisat::vec<Lit>    ban;
+            n_solutions++;
+            reportf("MODEL# %d:", n_solutions);
+            for (Var x = 0; x < pb_n_vars; x++){
+                assert(sat_solver.model[x] != l_Undef);
+                ban.push(mkLit(x, sat_solver.model[x] == l_True));
+                if (index2name[x][0] != '#')
+                    reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
+            }
+            reportf("\n");
+            sat_solver.addClause_(ban);
+        }else{
+            best_model.clear();
+            for (Var x = 0; x < pb_n_vars; x++)
+                assert(sat_solver.model[x] != l_Undef),
+                best_model.push(sat_solver.model[x] == l_True);
+            if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
+                break;
+
+            best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
+            if (best_goalvalue < UB_goalvalue) UB_goalvalue = best_goalvalue;
+
+            if (opt_satlive || opt_verbosity == 0) { 
+                printf("o %s\n", toString(best_goalvalue * goal_gcd)); fflush(stdout); }
+            if (cmd == sc_FirstSolution) break;
+
+            if (opt_verbosity >= 1 && !opt_satlive){
+                char* tmp = toString(best_goalvalue * goal_gcd);
+                reportf("\bFound solution: %s\b\n", tmp);
+                xfree(tmp); }
+            if (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) break;
+            if (opt_minimization == 0 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
+                if (assump_ps.size() > 0) inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+                try_lessthan = best_goalvalue;
+            } else {
+                inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+                try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
+            }
+            if (!addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, inequality))
+                break; // unsat
+            if (inequality != lit_Undef) assump_ps.push(inequality);
+            convertPbs(false);
+        }
+      } else { // UNSAT returned
+        if (assump_ps.size() == 0) break;
+
+        if (sat_solver.conflict.size() > 0) {
+            learnt_cls.push();
+            for (int i = 0; i < sat_solver.conflict.size(); i++) {
+                Minisat::Lit p = sat_solver.conflict[i];
+                if (p == ~inequality) { learnt_cls.last().clear(); break; }
+                else if (p != inequality) learnt_cls.last().push(p);
+                if (i+1 == sat_solver.conflict.size() && learnt_cls.last().size() > 0) 
+                    sat_solver.addClause(learnt_cls.last());
+            }
+            if (learnt_cls.last().size() == 0) learnt_cls.pop();
+        }
+        if (assump_ps.last() == inequality) {
+            addUnit(~inequality);
+            assump_ps.pop(); inequality = lit_Undef;
+        }
+        Int min_removed = Int_MAX;
+        int removed = 0;
+
+        for (int i = 0; i < sat_solver.conflict.size(); i++) {
+            Minisat::Lit p = ~sat_solver.conflict[i];
+            int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
+            if (j < assump_ps.size() && p == assump_ps[j]) { 
+                goal_ps.push(~p), goal_Cs.push(assump_Cs[j]);
+                if (assump_Cs[j] < min_removed) min_removed = assump_Cs[j];
+                assump_Cs[j] = 0; removed++;
+            } else min_removed = 0;
+        }
+        if (removed > 0) {
+            for (int i = 0, j = 0; i < assump_ps.size(); i++) {
+                if (assump_Cs[i] == 0) continue;
+                if (j < i) assump_ps[j] = assump_ps[i], assump_Cs[j] = assump_Cs[i];
+                j++;
+            }
+            assump_ps.shrink(removed); assump_Cs.shrink(removed);
+            LB_goalvalue = (min_removed == 0 ? next_sum(LB_goalvalue, goal_Cs) : 
+                                               LB_goalvalue + min_removed);
+        } else if (opt_minimization == 1) LB_goalvalue = next_sum(LB_goalvalue, goal_Cs); 
+        else LB_goalvalue = try_lessthan;
+
+        if (LB_goalvalue == best_goalvalue) break;
+        if (opt_minimization == 1) {
+            inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+            try_lessthan = LB_goalvalue+1;
+            if (LB_goalvalue > 100 || sat_solver.conflicts > 1000000) opt_minimization = 2;
+	} else if (opt_minimization == 0 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
+	    try_lessthan = (best_goalvalue != Int_MAX ? best_goalvalue : UB_goalvalue+1);
+	} else {
+	    inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+	    try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
+	}
+ 
+        if (!addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, inequality))
+            break; // unsat
+        if (inequality != lit_Undef) assump_ps.push(inequality);
+        convertPbs(false);
+
+        if (opt_minimization >= 1 && opt_verbosity >= 2) 
+            reportf("Lower bound  = %s\n", toString(LB_goalvalue));
+      }         
+    } // END OF LOOP
+
+    if (goal_gcd != 1) {
+        if (best_goalvalue != Int_MAX) best_goalvalue *= goal_gcd;
+        if (LB_goalvalue   != Int_MIN) LB_goalvalue *= goal_gcd;
+        if (UB_goalvalue   != Int_MAX) UB_goalvalue *= goal_gcd;
+    }
+    if (goal == NULL && sat)
+        best_goalvalue = Int_MIN;       // (found model, but don't care about it)
+    if (opt_verbosity >= 1){
+        if      (!sat)
+            reportf(asynch_interrupt ? "\bUNKNOWN\b\n" : "\bUNSATISFIABLE\b\n");
+        else if (goal == NULL)
+            reportf("\bSATISFIABLE: No goal function specified.\b\n");
+        else if (cmd == sc_FirstSolution){
+            char* tmp = toString(best_goalvalue);
+            reportf("\bFirst solution found: %s\b\n", tmp);
+            xfree(tmp);
+        }else if (asynch_interrupt){
+            char* tmp = toString(best_goalvalue);
+            reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
+            xfree(tmp);
+       }else{
+            char* tmp = toString(best_goalvalue);
             reportf("\bOptimal solution: %s\b\n", tmp);
             xfree(tmp);
         }
