@@ -381,8 +381,14 @@ int main(int argc, char** argv)
         if (opt_maxsat_msu || goal_min == goal_max) {
             opt_maxsat_msu = true;
             pb_solver->maxsat_solve(convert(opt_command));
-        } else 
+        } else {
+            for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--) {
+                if (pb_solver->soft_cls[i].snd->size() > 1) pb_solver->sat_solver.addClause(*pb_solver->soft_cls[i].snd);
+                delete pb_solver->soft_cls[i].snd;
+            }
+            pb_solver->soft_cls.clear();
             pb_solver->solve(convert(opt_command));
+        }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
