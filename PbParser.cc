@@ -316,7 +316,7 @@ static bool parseLit(B& in, vec<char>& tmp) {   // 'tmp' is cleared, then filled
 template<class B, class S>
 static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
 {
-    vec<Lit> ps, gps; vec<Int> Cs, gCs; vec<char> tmp;
+    vec<Lit> ps, gps; vec<Int> gCs; vec<char> tmp;
     int    gvars = 0;
     Int one = 1, weight;
     while (*in != EOF){
@@ -324,12 +324,14 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         while (1) {
             bool negated = parseLit(in,tmp);
             if (tmp.size() == 2 && tmp[0] == '0') break; 
-            ps.push(mkLit(solver.getVar(tmp), negated)); Cs.push(one);
+            ps.push(mkLit(solver.getVar(tmp), negated));
         }
         skipEndOfLine(in);
         if (ps.size() == 1) {
-            if (weight < hard_bound) gvars++,gps.push(~ps.last()), gCs.push(weight);
-            else if (!solver.addConstr(ps, Cs, one, 1, lit_Undef))
+            if (weight < hard_bound) {
+                gvars++,gps.push(~ps.last()), gCs.push(weight);
+                solver.storeSoftClause(ps, weight);
+            } else if (!solver.addClause(ps))
                 return false;
         } else {
             if (weight < hard_bound) {
@@ -337,13 +339,12 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
                 tmp.clear(); tmp.growTo(15,0);
                 sprintf(&tmp[0],"#%d",gvars);
                 ps.push(mkLit(solver.getVar(tmp))); gps.push(ps.last());
-                Cs.push(one);                       gCs.push(weight);
-            }
-            if (!solver.addConstr(ps, Cs, one, 1, lit_Undef))
+                gCs.push(weight);
+                solver.storeSoftClause(ps, weight);
+            } else if (!solver.addClause(ps))
                 return false;
         }
         ps.clear();
-        Cs.clear();
     }
     if (gvars == 0) {
         tmp.clear(); tmp.growTo(15,0);

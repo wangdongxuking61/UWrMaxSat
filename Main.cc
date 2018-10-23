@@ -62,6 +62,7 @@ int      opt_mem_lim       = INT32_MAX;
 int      opt_minimization  = 2; // 0 = sequential. 1 = alternating, 2 - binary
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
+bool     opt_maxsat_msu    = false;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -167,6 +168,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "w,weak-off"     )) opt_convert_weak = false;
             else if (oneof(arg, "no-pre"))          opt_preprocess   = false;
             else if (oneof(arg, "nm,no-model" ))    opt_model_out    = false;
+            else if (oneof(arg, "msu,maxsat-msu" )) opt_maxsat_msu   = true;
 
             //(make nicer later)
             else if (strncmp(arg, "-bdd-thres=" , 11) == 0) opt_bdd_thres  = atof(arg+11);
@@ -368,35 +370,21 @@ int main(int argc, char** argv)
         Minisat::limitMemory(opt_mem_lim);
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
-    if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
     if (opt_maxsat) {
-        Minisat::vec<Lit> assump_ps;
-        vec<Minisat::vec<Lit> > learnt_cls;
+        if (opt_verbosity >= 1) reportf("Parsing MaxSAT file...\n");
         parse_WCNF_file(opt_input, *pb_solver);
         Int goal_min = Int_MAX, goal_max = Int_MIN;
         for (int i = 0; i < pb_solver->goal->size; i++) {
             Int gi = (*pb_solver->goal)(i);
             if (gi < goal_min) goal_min = gi; else if (gi > goal_max) goal_max = gi;
         }
-        if (goal_min == goal_max && pb_solver->goal->size > 100000)
-            pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_command));
-        else 
+        if (opt_maxsat_msu || goal_min == goal_max) {
+            opt_maxsat_msu = true;
+            pb_solver->maxsat_solve(convert(opt_command));
+        } else 
             pb_solver->solve(convert(opt_command));
-        //if (pb_solver->goal->size > pb_solver->nVars() / 10 * 9)
-        //if (pb_solver->nConstrs() / 10 > pb_solver->nVars())
-/*        pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_minimization != 1 ? cmd_FirstSolution : opt_command));
-        if (opt_minimization != 1) {
-            Int LB_goalval = pb_solver->LB_goalvalue, UB_goalval = pb_solver->UB_goalvalue;
-            delete pb_solver;
-            pb_solver = new PbSolver(opt_preprocess);
-            FEnv::clear(); FEnv::stack.clear();
-            parse_WCNF_file(opt_input, *pb_solver);
-            pb_solver->LB_goalvalue = LB_goalval; pb_solver->UB_goalvalue = UB_goalval;
-        //if (assump_ps.size() > 0)
-            pb_solver->maxsat_solve(assump_ps, learnt_cls, convert(opt_command));
-        }*/
-        //else pb_solver->solve(convert(opt_command));
     } else {
+        if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
         pb_solver->solve(convert(opt_command));
     }

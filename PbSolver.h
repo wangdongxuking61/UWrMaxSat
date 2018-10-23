@@ -86,6 +86,7 @@ public:
     vec<Linear*>        constrs;        // Vector with all constraints.
     Linear*             goal;           // Non-normalized goal function (used in optimization). NULL means no goal function specified. NOTE! We are always minimizing.
     Int                 LB_goalvalue, UB_goalvalue; // Lower and upper bounds on the goal value
+    vec<Pair<Int, Minisat::vec<Lit>* > > soft_cls; // Relaxed non-unit soft clauses with weights; a relaxing var is the last one in a vector. 
 protected:
     vec<int>            n_occurs;       // Lit -> int: Number of occurrences.
     vec<vec<int> >      occur;          // Lit -> vec<int>: Occur lists. Left empty until 'setupOccurs()' is called.
@@ -100,10 +101,11 @@ protected:
     bool    addUnit  (Lit p) {
         if (value(p) == l_Undef) trail.push(p);
         return sat_solver.addClause(p); }
+public:
     bool    addClause(const vec<Lit>& ps){
         tmp_clause.clear(); for (int i = 0; i < ps.size(); i++) tmp_clause.push(ps[i]);
         return sat_solver.addClause_(tmp_clause); }
-        
+protected:        
     bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
     void    storePb   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
@@ -153,10 +155,14 @@ public:
 
     // Problem specification:
     //
-    int     getVar      (cchar* name);
-    void    allocConstrs(int n_vars, int n_constrs);
-    void    addGoal     (const vec<Lit>& ps, const vec<Int>& Cs);
-    bool    addConstr  (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
+    int     getVar         (cchar* name);
+    void    allocConstrs   (int n_vars, int n_constrs);
+    void    addGoal        (const vec<Lit>& ps, const vec<Int>& Cs);
+    bool    addConstr      (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
+    void    storeSoftClause(const vec<Lit>& ps, Int weight) {
+                Minisat::vec<Lit> *ps_copy = new Minisat::vec<Lit>; 
+                for (int i = 0; i < ps.size(); i++) ps_copy->push(ps[i]); 
+                soft_cls.push(Pair_new(weight, ps_copy)); }
 
     // Solve:
     //
@@ -164,7 +170,7 @@ public:
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
     void    solve(solve_Command cmd = sc_Minimize);        // Returns best/first solution found or Int_MAX if UNSAT.
-    void    maxsat_solve(Minisat::vec<Lit>& assump_ps, vec<Minisat::vec<Lit> >& learnt_cls, solve_Command cmd = sc_Minimize); 
+    void    maxsat_solve(solve_Command cmd = sc_Minimize); 
 };
 
 

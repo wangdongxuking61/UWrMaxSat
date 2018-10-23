@@ -309,12 +309,10 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static bool negate = false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
-    bool lastBaseOK = sizesDiff >= 0;    
+    bool lastBaseOK = false; //sizesDiff >= 0;    
     Int sum = 0, oldlo = lo, oldhi = hi;
 
     for (int i = 0; i < c.size; i++) sum += c(i);
-    /*negate = c.hi != Int_MAX && c.hi > sum/2 && (c.lo == Int_MIN || sum - c.lo < c.hi) || 
-             c.lo != Int_MIN && c.lo > sum/2;    */
         
     for (int i = 0, j = 0; lastBaseOK && j < c.size; j++) {
         while (i < Cs.size() && c(j) > Cs[i]) i++;
@@ -335,7 +333,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
         else lastEncodingOK = false;
     }
     if (j < c.size) lastEncodingOK = false;
-    negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK;
+    //negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK;
     if (negate) {
         lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi;
         hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;
@@ -374,12 +372,15 @@ Formula buildConstraint(const Linear& c, int max_cost)
         return _undef_;
     }
 
-    if (opt_verbosity >= 1){
-        reportf("Sorter-cost:%5d     ", FEnv::topSize());
-        reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
+    if (opt_verbosity >= 1 && opt_minimization != 1 || opt_verbosity >= 2) {
+        if (FEnv::topSize() > 0) {
+            reportf("Sorter-cost:%5d     ", FEnv::topSize());
+            reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
+        } else if (!opt_maxsat_msu || opt_minimization != 1) reportf("\n");
     }
     lastCost = FEnv::topSize(), lastRet = ret;
-    FEnv::keep();
+    if (opt_maxsat_msu && opt_minimization == 1) FEnv::stack.pop();
+    else FEnv::keep();
 
     return c.lit==lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
 }

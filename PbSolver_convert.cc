@@ -46,7 +46,7 @@ bool PbSolver::convertPbs(bool first_call)
 
         if (opt_verbosity >= 1) 
             if (first_call) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
-            else /**/ reportf("---[goal]---> ");
+            else if (i == 0 && constrs.size() == 1 && opt_minimization != 1) /**/ reportf("---[goal]---> ");
     
         try { // M. Piotrow 11.10.2017
             if (opt_convert == ct_Sorters)
@@ -96,19 +96,22 @@ bool PbSolver::convertPbs(bool first_call)
     }
 
     // NOTE: probably still leaks memory (if there are constraints that are NULL'ed elsewhere)
-    for (int i = 0; i < constrs.size(); i++)
-      if (constrs[i] != NULL)
-        constrs[i]->~Linear();
-
-    constrs.clear();
-    mem.clear();
+    if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1) {
+        for (int i = 0; i < constrs.size(); i++)
+          if (constrs[i] != NULL)
+            constrs[i]->~Linear();
+        constrs.clear();
+        mem.clear();
+    }
 
     try { // M. Piotrow 15.06.2018
-      clausify(sat_solver, converted_constrs);
+        int nvars = sat_solver.nVars(), ncls = sat_solver.nClauses();
+        clausify(sat_solver, converted_constrs);
+        if (opt_verbosity >=2 && ((nvars -= sat_solver.nVars()) < 0 | (ncls -= sat_solver.nClauses()) < 0)) 
+            reportf("New vars/cls: %d/%d\n", -nvars, -ncls);
     } catch (std::bad_alloc& ba) { // M. Piotrow 15.06.2018
       reportf("Out of memery in converting constraints: %s\n",ba.what());
       exit(1);
     }
-    
     return okay();
 }
