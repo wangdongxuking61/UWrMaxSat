@@ -81,8 +81,10 @@ Formula convertOneToBdd(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, int max_
             result = Pair_new(interval, fm);
         } while (last < size);
     } while (last < size);
-    if (opt_verbosity >= 1)
-      /**/ reportf("BDD-cost:%5d\n", FEnv::topSize());
+    if (opt_verbosity >= 1 && opt_minimization != 1 || opt_verbosity >= 2)
+        if (FEnv::topSize() > 0)
+            /**/ reportf("BDD-cost:%5d\n", FEnv::topSize());
+        else if (!opt_maxsat) reportf("\n");
 
     FEnv::keep();
     return result.snd;

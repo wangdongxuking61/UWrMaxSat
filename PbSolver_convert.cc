@@ -43,10 +43,13 @@ bool PbSolver::convertPbs(bool first_call)
     for (int i = 0; i < constrs.size(); i++) {
         if (constrs[i] == NULL) continue;
         Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
+//printf("constrs[%d]: size = %d, lo = %s, hi = %s, var = %s%d\n", i, constrs[i]->size, toString(constrs[i]->lo), toString(constrs[i]->hi), sign(constrs[i]->lit) ? "-" : "", var(constrs[i]->lit));
+//for (int j = 0; j < constrs[i]->size; j++) printf(" %s %s%d",toString((*constrs[i])(j)), sign((*constrs[i])[j]) ? "-" : "", var((*constrs[i])[j]));
+//printf("\n");
 
         if (opt_verbosity >= 1) 
             if (first_call) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
-            else if (i == 0 && constrs.size() == 1 && opt_minimization != 1) /**/ reportf("---[goal]---> ");
+            else if (i == 0 && constrs.size() == 1 && opt_minimization != 1 && !opt_maxsat) /**/ reportf("---[goal]---> ");
     
         try { // M. Piotrow 11.10.2017
             if (opt_convert == ct_Sorters)

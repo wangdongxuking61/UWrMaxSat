@@ -502,6 +502,18 @@ Int evalGoal(Linear& goal, Minisat::vec<lbool>& model)
     return sum;
 }
 
+Int evalGoal(Linear& goal, vec<bool>& model)
+{
+    Int sum = 0;
+    for (int i = 0; i < goal.size; i++){
+        if (( sign(goal[i]) && model[var(goal[i])] == false)
+        ||  (!sign(goal[i]) && model[var(goal[i])] == true )
+        )
+            sum += goal(i);
+    }
+    return sum;
+}
+
 void PbSolver::solve(solve_Command cmd)
 {
     if (!okay()) {
@@ -750,34 +762,27 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (opt_verbosity >= 1) sat_solver.printVarsCls();
         return;
     }
-
+    if (goal == NULL) { opt_maxsat_msu = false; solve(cmd); return; }
     // Convert constraints:
     pb_n_vars = nVars();
     pb_n_constrs = nClauses();
 
     // Freeze goal function variables (for SatELite):
-    if (goal != NULL){
-        for (int i = 0; i < goal->size; i++)
-            sat_solver.setFrozen(var((*goal)[i]), true);
-    }
-
-    // Solver (optimize):
-    //sat_solver.setVerbosity(opt_verbosity);
+    for (int i = 0; i < goal->size; i++)
+        sat_solver.setFrozen(var((*goal)[i]), true);
     sat_solver.verbosity = opt_verbosity;
-    Int goal_gcd = 1;
-    if (goal != NULL) {
-        goal_gcd = (*goal)(0);
-        for (int i = 1; i < goal->size; ++i) goal_gcd = gcd(goal_gcd, (*goal)(i));
-        if (goal_gcd < 0) goal_gcd = -goal_gcd;
-        if (goal_gcd != 1) {
-            if (LB_goalvalue != Int_MIN) LB_goalvalue /= goal_gcd;
-            if (UB_goalvalue != Int_MAX) UB_goalvalue /= goal_gcd;
-        }
+
+    Int goal_gcd = (*goal)(0);
+    for (int i = 1; i < goal->size; ++i) goal_gcd = gcd(goal_gcd, (*goal)(i));
+    if (goal_gcd < 0) goal_gcd = -goal_gcd;
+    if (goal_gcd != 1) {
+        if (LB_goalvalue != Int_MIN) LB_goalvalue /= goal_gcd;
+        if (UB_goalvalue != Int_MAX) UB_goalvalue /= goal_gcd;
     }
 
     assert(best_goalvalue == Int_MAX);
 
-    if (goal != NULL && opt_polarity_sug != 0){
+    if (opt_polarity_sug != 0){
         for (int i = 0; i < goal->size; i++){
             bool dir = (*goal)(i)*opt_polarity_sug > 0 ? !sign((*goal)[i]) : sign((*goal)[i]);
             sat_solver.setPolarity(var((*goal)[i]), /*lbool*/(dir));
@@ -803,81 +808,88 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     vec<Lit> goal_ps;
     Minisat::vec<Lit> assump_ps;
     vec<Int> goal_Cs, assump_Cs, sorted_assump_Cs, saved_constrs_Cs;
-    bool    sat = false;
+    bool    sat = false, weighted_instance = true;
     Minisat::Lit inequality = lit_Undef, max_assump = lit_Undef;
     Int     try_lessthan = opt_goal, max_assump_Cs = Int_MIN;
     int     n_solutions = 0;    // (only for AllSolutions mode)
+    vec<Pair<Lit,Int> > psCs;
 
     Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
-    if (goal != NULL) {
-        vec<Pair<Lit,Int> > psCs;
-        for (int i = 0; i < goal->size; ++i)
-            if (value((*goal)[i]) != l_Undef) {
-                if (value((*goal)[i]) == l_True) {
-                    fixed_goalval += (*goal)(i);
-                    addUnit((*goal)[i]);
-                } else addUnit(~(*goal)[i]);
-	    } else { 
-                if ((*goal)(i) < 0) LB_goalval += (*goal)(i);
-                else                UB_goalval += (*goal)(i);
-                psCs.push(Pair_new(~(*goal)[i], (*goal)(i)/goal_gcd));
-            }
-        LB_goalval += fixed_goalval, UB_goalval += fixed_goalval;
-        if (goal_gcd != 1) LB_goalval /= goal_gcd, UB_goalval /= goal_gcd, fixed_goalval /= goal_gcd;
-        sort(psCs);
-        if (UB_goalvalue == Int_MAX) {
-            for (int i = 0; i < psCs.size(); i++) sorted_assump_Cs.push(psCs[i].snd);
-            sortUnique(sorted_assump_Cs);
-            if (sorted_assump_Cs.size()  == 1) sorted_assump_Cs.clear();
-            UB_goalvalue = UB_goalval;
-        } else {
-            for (int i = 0; i < psCs.size(); i++)
-                goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
-            try_lessthan = ++UB_goalvalue;
-            if (goal_ps.size() > 0) {
-                addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, inequality);
-                convertPbs(false);
-            }
-        }
-        if (LB_goalvalue < LB_goalval) LB_goalvalue = LB_goalval;
-        if (opt_minimization != 1 || sorted_assump_Cs.size() == 0) {
-            for (int i = 0; i < psCs.size(); i++)
-                assump_ps.push(psCs[i].fst), assump_Cs.push(psCs[i].snd);
-            for (int i = 0; i < soft_cls.size(); i++) { 
+    int j = 0;
+    for (int i = 0; i < goal->size; ++i)
+        if (value((*goal)[i]) != l_Undef) {
+            if (value((*goal)[i]) == l_True) {
+                fixed_goalval += (*goal)(i);
+                addUnit((*goal)[i]);
+            } else {
                 if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd);
-                delete soft_cls[i].snd;
+                addUnit(~(*goal)[i]);
             }
-            soft_cls.clear();
-        } else {
-            for (int i = soft_cls.size() - 1; i >= 0; i--) 
-                for (int j = soft_cls[i].snd->size() - 1; j >= 0; j--) sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
-            max_assump_Cs = sorted_assump_Cs.last();
-            sorted_assump_Cs.pop();
-            sort(soft_cls);
-            int start = soft_cls.size() - 1;
-            while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
-            start++;
-            if (start < soft_cls.size()) {
-                int sz = soft_cls.size() - start;
-                sort(&soft_cls[start], sz, LT<Pair<Int, Minisat::vec<Lit>*> >());
-                for (int i = start; i < soft_cls.size(); i++) {
-                    Lit p = ~soft_cls[i].snd->last();
-                    if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd); else p = ~p;
-                    assump_ps.push(p); assump_Cs.push(soft_cls[i].fst/goal_gcd);
-                }
-                soft_cls.shrink(sz);
-            }
+            delete soft_cls[i].snd;
+        } else { 
+            if ((*goal)(i) < 0) LB_goalval += (*goal)(i);
+            else                UB_goalval += (*goal)(i);
+            psCs.push(Pair_new(~(*goal)[i], (*goal)(i)/goal_gcd));
+            if (j < i) soft_cls[j] = soft_cls[i];
+            j++;
         }
-        if (psCs.size() > 0) max_assump = psCs.last().fst;
-        psCs.clear();
+    if (j < soft_cls.size()) soft_cls.shrink(soft_cls.size() - j);
+    LB_goalval += fixed_goalval, UB_goalval += fixed_goalval;
+    if (goal_gcd != 1) LB_goalval /= goal_gcd, UB_goalval /= goal_gcd, fixed_goalval /= goal_gcd;
+    sort(psCs);
+    if (UB_goalvalue == Int_MAX) {
+        for (int i = 0; i < psCs.size(); i++) sorted_assump_Cs.push(psCs[i].snd);
+        sortUnique(sorted_assump_Cs);
+        if (sorted_assump_Cs.size()  == 1) 
+            sorted_assump_Cs.clear(), weighted_instance = false;
+        UB_goalvalue = UB_goalval;
+    } else {
+        for (int i = 0; i < psCs.size(); i++)
+            goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
+        try_lessthan = ++UB_goalvalue;
+        if (goal_ps.size() > 0) {
+            addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, inequality);
+            convertPbs(false);
+        }
     }
+    if (LB_goalvalue < LB_goalval) LB_goalvalue = LB_goalval;
+    if (opt_minimization != 1 || sorted_assump_Cs.size() == 0) {
+        for (int i = 0; i < psCs.size(); i++)
+            assump_ps.push(psCs[i].fst), assump_Cs.push(psCs[i].snd);
+        for (int i = 0; i < soft_cls.size(); i++) { 
+            if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd);
+            delete soft_cls[i].snd;
+        }
+        soft_cls.clear();
+    } else {
+        for (int i = soft_cls.size() - 1; i >= 0; i--) 
+            for (int j = soft_cls[i].snd->size() - 1; j >= 0; j--) sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
+        max_assump_Cs = sorted_assump_Cs.last();
+        sorted_assump_Cs.pop();
+        sort(soft_cls);
+        int start = soft_cls.size() - 1;
+        while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
+        start++;
+        if (start < soft_cls.size()) {
+            int sz = soft_cls.size() - start;
+            sort(&soft_cls[start], sz, LT<Pair<Int, Minisat::vec<Lit>*> >());
+            for (int i = start; i < soft_cls.size(); i++) {
+                Lit p = ~soft_cls[i].snd->last();
+                if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd); else p = ~p;
+                assump_ps.push(p); assump_Cs.push(soft_cls[i].fst/goal_gcd);
+            }
+            soft_cls.shrink(sz);
+        }
+    }
+    if (psCs.size() > 0) max_assump = psCs.last().fst;
     if (opt_verbosity >= 1)
         sat_solver.printVarsCls();
     while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
+//printf("LB = %s, UB = %s, try = %s, fix = %s, ps.sz = %d, ass.sz = %d, ass.sz+scl.sz = %d constrs.size = %d conflicts = %lu, rvar = %d\n", toString(LB_goalvalue), toString(UB_goalvalue), toString(try_lessthan), toString(fixed_goalval), goal_ps.size(), assump_ps.size(), assump_ps.size()+soft_cls.size(), saved_constrs.size(), sat_solver.conflicts, toInt(inequality));
       if (sat_solver.solve(assump_ps)) { // SAT returned
         Int lastCs = 1;
-        if(opt_minimization != 1 && assump_ps.size() > 0 && assump_ps.last() == inequality) {
+        if(opt_minimization != 1 && assump_ps.size() == 1 && assump_ps.last() == inequality) {
           addUnit(inequality);
           lastCs = assump_Cs.last();
           assump_ps.pop(); assump_Cs.pop(); inequality = lit_Undef;
@@ -897,16 +909,19 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             reportf("\n");
             sat_solver.addClause_(ban);
         }else{
-            best_model.clear();
+            vec<bool> model;
             for (Var x = 0; x < pb_n_vars; x++)
                 assert(sat_solver.model[x] != l_Undef),
-                best_model.push(sat_solver.model[x] == l_True);
-            if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
-                break;
-
-            best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
+                model.push(sat_solver.model[x] == l_True);
+            for (int i = 0; i < soft_cls.size(); i++)
+                if (soft_cls[i].snd->size() > 1) model[var(soft_cls[i].snd->last())] = true;
+            Int goalvalue = evalGoal(*goal, model) / goal_gcd;
+            if (goalvalue < best_goalvalue) {
+                best_goalvalue = goalvalue;
+                best_model.clear(); model.copyTo(best_model);
+            }
             Int goal_diff = best_goalvalue - evalPsCs(goal_ps, goal_Cs, sat_solver.model);
-            if (best_goalvalue < UB_goalvalue && (opt_minimization != 1 || sorted_assump_Cs.size() == 0)) {
+            if (best_goalvalue < UB_goalvalue) {
                 UB_goalvalue = best_goalvalue;
                 char* tmp = toString(best_goalvalue * goal_gcd);
                 if (opt_satlive || opt_verbosity == 0)
@@ -934,11 +949,11 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                         assump_ps[to] = p; assump_Cs[to++] = soft_cls[i].fst/goal_gcd;
                     }
                     soft_cls.shrink(sz);
+                    try_lessthan = best_goalvalue;
                 }
                 continue;
             }
             if (opt_minimization == 0 || best_goalvalue - LB_goalvalue < opt_seq_thres) {
-                //if (assump_ps.size() > 0) inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
                 inequality = lit_Undef;
                 try_lessthan = best_goalvalue;
             } else {
@@ -947,13 +962,18 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             }
             if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, inequality))
                 break; // unsat
-            if (inequality != lit_Undef) assump_ps.push(inequality), assump_Cs.push(lastCs);
+            if (inequality != lit_Undef) assump_ps.push(inequality), assump_Cs.push(opt_minimization == 2 ? try_lessthan : lastCs);
             convertPbs(false);
         }
       } else { // UNSAT returned
         if (assump_ps.size() == 0) break;
+//printf("CONFLICT(%d): ",sat_solver.conflict.size()); for (int i=0; i < sat_solver.conflict.size() && sat_solver.conflict[i] > max_assump; i++) printf("%d ",toInt(sat_solver.conflict[i])); printf("\n");
+//printf("SAVED CONSTR\n"); for (int i=0; i < saved_constrs.size(); i++, putchar('\n')) {
+//printf("CONSTR[%d]: %d %s ", i, toInt(saved_constrs[i]->lit), toString(saved_constrs[i]->lo)); 
+//for (int j = 0; j < saved_constrs[i]->size; j++) printf("%d ", toInt((*saved_constrs[i])[j])); 
+//putchar('\n');}
         if (sat_solver.conflict.size() > 0 && sat_solver.conflict.size() < 6) sat_solver.addClause(sat_solver.conflict);
-        Int min_removed = Int_MAX;
+        Int min_removed = Int_MAX, min_bound = Int_MAX;
         int removed = 0;
         bool other_conflict = false;
 
@@ -967,7 +987,10 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 if (opt_minimization == 1 || p <= max_assump) {
                     goal_ps.push(~p), goal_Cs.push(opt_minimization == 1 ? 1 : assump_Cs[j]);
                     if (assump_Cs[j] < min_removed) min_removed = assump_Cs[j];
-                } else other_conflict = true; // if (min_removed != Int_MAX) min_removed = 0;
+                } else { 
+                    other_conflict = true;
+                    if (assump_Cs[j] < min_bound) min_bound = assump_Cs[j];
+                }
                 assump_Cs[j] = -assump_Cs[j]; removed++;
             }
         }
@@ -999,18 +1022,18 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             }
             if ((removed = assump_ps.size() - j) > 0)
                 assump_ps.shrink(removed), assump_Cs.shrink(removed);
+            if (min_bound == Int_MAX || min_bound < LB_goalvalue) min_bound = LB_goalvalue + 1;
             LB_goalvalue = (min_removed == 0 ? next_sum(LB_goalvalue, goal_Cs) : 
-                            min_removed == Int_MAX ? try_lessthan : LB_goalvalue + min_removed);
+                            min_removed == Int_MAX ? min_bound : LB_goalvalue + min_removed);
         } else if (opt_minimization == 1) LB_goalvalue = next_sum(LB_goalvalue, goal_Cs); 
         else LB_goalvalue = try_lessthan;
 
         if (LB_goalvalue == best_goalvalue && opt_minimization != 1) break;
 
-        Int goal_diff = best_goalvalue == Int_MAX ? fixed_goalval : best_goalvalue - evalPsCs(goal_ps, goal_Cs, best_model);
+        Int goal_diff = best_goalvalue == Int_MAX || opt_minimization == 2 ? fixed_goalval : best_goalvalue - evalPsCs(goal_ps, goal_Cs, best_model);
         if (opt_minimization == 1) {
             inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars), true);
-            try_lessthan = goal_diff + 2; // LB_goalvalue+1;
-            //if (LB_goalvalue > 100 || sat_solver.conflicts > 1000000) opt_minimization = 2;
+            try_lessthan = goal_diff + 2;
 	} else if (opt_minimization == 0 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
             inequality = lit_Undef;
 	    try_lessthan = (best_goalvalue != Int_MAX ? best_goalvalue : UB_goalvalue+1);
@@ -1022,7 +1045,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, inequality))
             break; // unsat
         if (inequality != lit_Undef) {
-            assump_ps.push(inequality); assump_Cs.push(min_removed != Int_MAX && min_removed != 0 ? min_removed : 1);
+            assump_ps.push(inequality); assump_Cs.push(opt_minimization == 2 ? try_lessthan : 
+                                                       min_removed != Int_MAX && min_removed != 0 ? min_removed : 1);
         }
         if (constrs.size() > 0) convertPbs(false);
         if (opt_minimization == 1) {
@@ -1048,6 +1072,33 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         }
         if (opt_minimization >= 1 && opt_verbosity >= 2) 
             reportf("Lower bound  = %s\n", toString(LB_goalvalue));
+        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 20000 || !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
+            for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
+                sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
+            goal_ps.clear(); goal_Cs.clear();
+            int k = 0;
+            for (int j = 0, i = 0; i < psCs.size(); i++) {
+                if (j == assump_ps.size() || psCs[i].fst < assump_ps[j] || psCs[i].fst == assump_ps[j] && psCs[i].snd > assump_Cs[j])
+                    goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
+                if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) {
+                    if (psCs[i].snd == assump_Cs[j]) { 
+                        if (k < j) assump_ps[k] = assump_ps[j], assump_Cs[k] = assump_Cs[j];
+                        k++;
+                    }
+                    j++;
+                }
+            }
+            if (k < assump_ps.size()) assump_ps.shrink(assump_ps.size() - k), assump_Cs.shrink(assump_Cs.size() - k);
+            for (int i = 0; i < soft_cls.size(); i++) { 
+                if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd);
+                delete soft_cls[i].snd;
+            }
+            soft_cls.clear();
+            if (opt_verbosity >= 1) {
+                reportf("Switching to binary search ... (after %g s and %d conflicts)\n", Minisat::cpuTime(), sat_solver.conflicts);
+            }
+            opt_minimization = 2;
+        }
       }         
     } // END OF LOOP
 
@@ -1056,8 +1107,6 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (LB_goalvalue   != Int_MIN) LB_goalvalue *= goal_gcd;
         if (UB_goalvalue   != Int_MAX) UB_goalvalue *= goal_gcd;
     }
-    if (goal == NULL && sat)
-        best_goalvalue = Int_MIN;       // (found model, but don't care about it)
     if (opt_verbosity >= 1){
         if      (!sat)
             reportf(asynch_interrupt ? "\bUNKNOWN\b\n" : "\bUNSATISFIABLE\b\n");

@@ -376,7 +376,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
         if (FEnv::topSize() > 0) {
             reportf("Sorter-cost:%5d     ", FEnv::topSize());
             reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
-        } else if (!opt_maxsat_msu || opt_minimization != 1) reportf("\n");
+        } else if (!opt_maxsat) reportf("\n");
     }
     lastCost = FEnv::topSize(), lastRet = ret;
     if (opt_maxsat_msu && opt_minimization == 1) FEnv::stack.pop();

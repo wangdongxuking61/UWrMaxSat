@@ -59,10 +59,11 @@ int      opt_base_max      = 47;
 int      opt_cpu_lim       = INT32_MAX;
 int      opt_mem_lim       = INT32_MAX;
 
-int      opt_minimization  = 2; // 0 = sequential. 1 = alternating, 2 - binary
+int      opt_minimization  = -1; // -1 = to be set, 0 = sequential. 1 = alternating, 2 - binary
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
-bool     opt_maxsat_msu    = false;
+bool     opt_maxsat_msu    = true;
+double   opt_unsat_cpu     = 120; // in seconds
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -120,6 +121,10 @@ cchar* doc =
     "  -v0,-v1,-v2   Set verbosity level (1 default)\n"
     "  -cnf=<file>   Write SAT problem to a file. Trivial UNSAT => no file written.\n"
     "  -nm -no-model Supress model output.\n"
+    "\n"
+    "MaxSAT specific options:\n"
+    "  -no-msu       Use PB specific search algoritms for MaxSAT (see -alt, -bin, -seq).\n"
+    "  -unsat-cpu=   Time to switch UNSAT search strategy to SAT/UNSAT. [def: %g s]\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -153,7 +158,7 @@ void parseOptions(int argc, char** argv)
     for (int i = 1; i < argc; i++){
         char*   arg = argv[i];
         if (arg[0] == '-'){
-            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, opt_base_max), exit(0);
+            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, opt_base_max, opt_unsat_cpu), exit(0);
 
             else if (oneof(arg, "ca,adders" )) opt_convert = ct_Adders;
             else if (oneof(arg, "cs,sorters")) opt_convert = ct_Sorters;
@@ -168,7 +173,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "w,weak-off"     )) opt_convert_weak = false;
             else if (oneof(arg, "no-pre"))          opt_preprocess   = false;
             else if (oneof(arg, "nm,no-model" ))    opt_model_out    = false;
-            else if (oneof(arg, "msu,maxsat-msu" )) opt_maxsat_msu   = true;
+            else if (oneof(arg, "no-msu" ))         opt_maxsat_msu   = false;
 
             //(make nicer later)
             else if (strncmp(arg, "-bdd-thres=" , 11) == 0) opt_bdd_thres  = atof(arg+11);
@@ -179,6 +184,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-base-max=",   10) == 0) opt_base_max   = atoi(arg+10); 
             else if (strncmp(arg, "-bin-split=",  11) == 0) opt_bin_percent= atoi(arg+11); 
             else if (strncmp(arg, "-seq-thres=",  11) == 0) opt_seq_thres  = atoi(arg+11);
+            else if (strncmp(arg, "-unsat-cpu=",  11) == 0) opt_unsat_cpu  = atoi(arg+11);
             //(end)
 
             else if (oneof(arg, "1,first"   )) opt_command = cmd_FirstSolution;
@@ -370,16 +376,12 @@ int main(int argc, char** argv)
         Minisat::limitMemory(opt_mem_lim);
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
-    if (opt_maxsat) {
+    if (opt_maxsat || opt_input != NULL && strcmp(opt_input+strlen(opt_input)-4, "wcnf") == 0) {
+        opt_maxsat = true;
+        if (opt_minimization < 0) opt_minimization = 1; // alt (unsat based) algorithm
         if (opt_verbosity >= 1) reportf("Parsing MaxSAT file...\n");
         parse_WCNF_file(opt_input, *pb_solver);
-        Int goal_min = Int_MAX, goal_max = Int_MIN;
-        for (int i = 0; i < pb_solver->goal->size; i++) {
-            Int gi = (*pb_solver->goal)(i);
-            if (gi < goal_min) goal_min = gi; else if (gi > goal_max) goal_max = gi;
-        }
-        if (opt_maxsat_msu || goal_min == goal_max) {
-            opt_maxsat_msu = true;
+        if (opt_maxsat_msu) {
             pb_solver->maxsat_solve(convert(opt_command));
         } else {
             for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--) {
@@ -387,11 +389,13 @@ int main(int argc, char** argv)
                 delete pb_solver->soft_cls[i].snd;
             }
             pb_solver->soft_cls.clear();
+            if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
             pb_solver->solve(convert(opt_command));
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
+        if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
         pb_solver->solve(convert(opt_command));
     }
 

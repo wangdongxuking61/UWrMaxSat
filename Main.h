@@ -54,6 +54,7 @@ extern int      opt_minimization;
 extern int      opt_seq_thres;
 extern int      opt_bin_percent;
 extern bool     opt_maxsat_msu;
+extern double   opt_unsat_cpu;
 
 // -- files:
 extern char*    opt_input;
