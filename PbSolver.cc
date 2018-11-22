@@ -1072,7 +1072,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         }
         if (opt_minimization >= 1 && opt_verbosity >= 2) 
             reportf("Lower bound  = %s\n", toString(LB_goalvalue));
-        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 20000 || !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
+        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 25000 || !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
             for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
                 sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
             goal_ps.clear(); goal_Cs.clear();

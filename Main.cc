@@ -63,7 +63,7 @@ int      opt_minimization  = -1; // -1 = to be set, 0 = sequential. 1 = alternat
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
 bool     opt_maxsat_msu    = true;
-double   opt_unsat_cpu     = 120; // in seconds
+double   opt_unsat_cpu     = 240; // in seconds
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
