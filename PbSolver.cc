@@ -528,7 +528,7 @@ void PbSolver::solve(solve_Command cmd)
         reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
     propagate();
     if (!convertPbs(true)){
-        if (opt_verbosity >= 1) sat_solver.printVarsCls();
+        if (opt_verbosity >= 1) sat_solver.printVarsCls(constrs.size() > 0);
         assert(!okay()); return; 
     }
 
@@ -705,6 +705,19 @@ void PbSolver::solve(solve_Command cmd)
     }
 }
 
+void core_minimization(SimpSolver &sat_solver, int max_size, int n)
+{
+    int last_size = sat_solver.conflict.size();
+    Minisat::vec<Lit> assump;
+    for (int i = n; i > 0 && last_size > max_size; i--) {
+        assump.clear();
+        for (int j = 0; j < sat_solver.conflict.size(); j++) assump.push(~sat_solver.conflict[j]);
+        sat_solver.solve(assump);
+        if (sat_solver.conflict.size() >= last_size) return;
+        last_size = sat_solver.conflict.size();
+    }
+}
+
 static Int next_sum(Int bound, const vec<Int>& cs)
 { // find the smallest sum of a subset of cs that is greater that bound
     vec<Int> sum[2];
@@ -753,6 +766,8 @@ Int evalPsCs(vec<Lit>& ps, vec<Int>&Cs, Minisat::vec<lbool>& model)
     }
     return sum;
 }
+
+static inline int log2(int n) { int i=0; while (n>>=1) i++; return i; }
 
 template <class T> struct LT {bool operator()(T x, T y) { return x.snd->last() < y.snd->last(); }};
 
@@ -813,6 +828,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     Int     try_lessthan = opt_goal, max_assump_Cs = Int_MIN;
     int     n_solutions = 0;    // (only for AllSolutions mode)
     vec<Pair<Lit,Int> > psCs;
+    vec<Pair<Int,Lit> > Csps;
 
     Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
     int j = 0;
@@ -830,13 +846,14 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             if ((*goal)(i) < 0) LB_goalval += (*goal)(i);
             else                UB_goalval += (*goal)(i);
             psCs.push(Pair_new(~(*goal)[i], (*goal)(i)/goal_gcd));
+            Csps.push(Pair_new((*goal)(i)/goal_gcd, ~(*goal)[i]));
             if (j < i) soft_cls[j] = soft_cls[i];
             j++;
         }
     if (j < soft_cls.size()) soft_cls.shrink(soft_cls.size() - j);
     LB_goalval += fixed_goalval, UB_goalval += fixed_goalval;
     if (goal_gcd != 1) LB_goalval /= goal_gcd, UB_goalval /= goal_gcd, fixed_goalval /= goal_gcd;
-    sort(psCs);
+    sort(psCs); sort(Csps);
     if (UB_goalvalue == Int_MAX) {
         for (int i = 0; i < psCs.size(); i++) sorted_assump_Cs.push(psCs[i].snd);
         sortUnique(sorted_assump_Cs);
@@ -883,7 +900,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     }
     if (psCs.size() > 0) max_assump = psCs.last().fst;
     if (opt_verbosity >= 1)
-        sat_solver.printVarsCls();
+        sat_solver.printVarsCls(goal_ps.size() > 0);
     while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
 //printf("LB = %s, UB = %s, try = %s, fix = %s, ps.sz = %d, ass.sz = %d, ass.sz+scl.sz = %d constrs.size = %d conflicts = %lu, rvar = %d\n", toString(LB_goalvalue), toString(UB_goalvalue), toString(try_lessthan), toString(fixed_goalval), goal_ps.size(), assump_ps.size(), assump_ps.size()+soft_cls.size(), saved_constrs.size(), sat_solver.conflicts, toInt(inequality));
@@ -972,7 +989,10 @@ void PbSolver::maxsat_solve(solve_Command cmd)
 //printf("CONSTR[%d]: %d %s ", i, toInt(saved_constrs[i]->lit), toString(saved_constrs[i]->lo)); 
 //for (int j = 0; j < saved_constrs[i]->size; j++) printf("%d ", toInt((*saved_constrs[i])[j])); 
 //putchar('\n');}
-        if (sat_solver.conflict.size() > 0 && sat_solver.conflict.size() < 6) sat_solver.addClause(sat_solver.conflict);
+        if (sat_solver.conflict.size() > 20) 
+            core_minimization(sat_solver, 20, log2(sat_solver.conflict.size()));
+        if (sat_solver.conflict.size() > 0 && sat_solver.conflict.size() < 6) 
+            sat_solver.addClause(sat_solver.conflict);
         Int min_removed = Int_MAX, min_bound = Int_MAX;
         int removed = 0;
         bool other_conflict = false;
@@ -1067,12 +1087,14 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                         j++;
                     }
                 }
-            if (j < saved_constrs.size()) saved_constrs.shrink(saved_constrs.size() - j), saved_constrs_Cs.shrink(saved_constrs_Cs.size() - j);
+            if (j < saved_constrs.size()) 
+                saved_constrs.shrink(saved_constrs.size() - j), saved_constrs_Cs.shrink(saved_constrs_Cs.size() - j);
             constrs.clear();
         }
         if (opt_minimization >= 1 && opt_verbosity >= 2) 
             reportf("Lower bound  = %s\n", toString(LB_goalvalue));
-        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 25000 || !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
+        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 25000 ||
+                                     !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
             for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
                 sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
             goal_ps.clear(); goal_Cs.clear();
@@ -1100,6 +1122,27 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             opt_minimization = 2;
         }
       }         
+        if (weighted_instance && sat && sat_solver.conflicts > 10000) { // hardening soft clauses with large weights
+            int lst_size = Csps.size();
+            for ( ; Csps.size() > 0 && Csps.last().fst > UB_goalvalue; Csps.pop()) { // hardening soft clauses with weights > the current goal upper bound 
+                Minisat::Lit p = Csps.last().snd;
+                addUnit(p);
+                int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
+                if (j >= 0 && j < assump_ps.size() && p == assump_ps[j])
+                    assump_Cs[j] = -assump_Cs[j]; // mark a corresponding assumption to be deleted
+            }
+            if (lst_size > Csps.size()) {
+                if (opt_verbosity > 0) reportf("Hardened %d soft clauses (after %d conflicts)\n", lst_size - Csps.size(), sat_solver.conflicts);
+                int removed, j = 0;
+                for (int i = 0; i < assump_ps.size(); i++)
+                    if (assump_Cs[i] > 0) {
+                        if (j < i) assump_ps[j] = assump_ps[i], assump_Cs[j] = assump_Cs[i];
+                        j++;
+                    }
+                if ((removed = assump_ps.size() - j) > 0)
+                    assump_ps.shrink(removed), assump_Cs.shrink(removed);
+            }
+        }
     } // END OF LOOP
 
     if (goal_gcd != 1) {
