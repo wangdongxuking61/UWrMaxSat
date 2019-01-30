@@ -520,6 +520,10 @@ void PbSolver::solve(solve_Command cmd)
         if (opt_verbosity >= 1) sat_solver.printVarsCls();
         return;
     }
+#if defined(GLUCOSE3) || defined(GLUCOSE4)    
+    if (opt_verbosity >= 1) sat_solver.verbEveryConflicts = 100000;
+    sat_solver.setIncrementalMode();
+#endif
 
     // Convert constraints:
     pb_n_vars = nVars();
@@ -540,7 +544,7 @@ void PbSolver::solve(solve_Command cmd)
 
     // Solver (optimize):
     //sat_solver.setVerbosity(opt_verbosity);
-    sat_solver.verbosity = opt_verbosity;
+    sat_solver.verbosity = opt_verbosity - 1;
     Int goal_gcd;
     if (goal != NULL) {
         goal_gcd = (*goal)(0);
@@ -555,7 +559,7 @@ void PbSolver::solve(solve_Command cmd)
     if (opt_polarity_sug != 0){
         for (int i = 0; i < goal_Cs.size(); i++){
             bool dir = goal_Cs[i]*opt_polarity_sug > 0 ? !sign(goal_ps[i]) : sign(goal_ps[i]);
-            sat_solver.setPolarity(var(goal_ps[i]), /*lbool*/(dir));
+            sat_solver.setPolarity(var(goal_ps[i]), LBOOL(dir));
         }
     }
 
@@ -591,7 +595,7 @@ void PbSolver::solve(solve_Command cmd)
 	    } else if (goal_Cs[i] < 0) LB_goalvalue += goal_Cs[i];
             else UB_goalvalue += goal_Cs[i];
     if (opt_minimization != 0 && goal != NULL && opt_goal == Int_MAX) {
-        Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+        Lit assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
         try_lessthan = (UB_goalvalue + LB_goalvalue)/2;
         if (addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit))  assump_ps.push(assump_lit), convertPbs(false);
     }
@@ -642,7 +646,7 @@ void PbSolver::solve(solve_Command cmd)
                 if (!addConstr(goal_ps, goal_Cs, best_goalvalue, -2, lit_Undef))
                     break;
             } else {
-                Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+                Lit assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
 
                 try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 
@@ -667,7 +671,7 @@ void PbSolver::solve(solve_Command cmd)
 	  if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, lit_Undef))
 	    break;
 	} else {
-	  Lit assump_lit = mkLit(sat_solver.newVar(true, !opt_branch_pbvars));
+	  Lit assump_lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
 
 	  try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 
@@ -705,18 +709,38 @@ void PbSolver::solve(solve_Command cmd)
     }
 }
 
-void core_minimization(SimpSolver &sat_solver, int max_size, int n)
+static void core_minimization(SimpSolver &sat_solver, Minisat::vec<Lit> &mus)
 {
     int last_size = sat_solver.conflict.size();
-    Minisat::vec<Lit> assump;
+
+    sat_solver.setConfBudget(1000);
+    for (int i = 0; last_size > 1 && i < last_size; ) {
+        Lit p = mus[i];
+        for (int j = i+1; j < last_size; j++) mus[j-1] = mus[j];
+        mus.pop();
+        if (sat_solver.solveLimited(mus) != l_False) {
+            mus.push();
+            for (int j = last_size - 1; j > i; j--) mus[j] = mus[j-1];
+            mus[i] = p; i++;
+        } else last_size--;
+    }
+    sat_solver.budgetOff();
+
+    for (int i = mus.size() - 1; i >= 0; i--) mus[i] = ~mus[i];
+}
+
+/*static void core_trimming(SimpSolver &sat_solver, int max_size, int n)
+{
+    int last_size = sat_solver.conflict.size();
+    Minisat::vec<Lit> assump(last_size);
     for (int i = n; i > 0 && last_size > max_size; i--) {
         assump.clear();
-        for (int j = 0; j < sat_solver.conflict.size(); j++) assump.push(~sat_solver.conflict[j]);
+        for (int j = 0; j < last_size; j++) assump.push(~sat_solver.conflict[j]);
         sat_solver.solve(assump);
         if (sat_solver.conflict.size() >= last_size) return;
         last_size = sat_solver.conflict.size();
     }
-}
+}*/
 
 static Int next_sum(Int bound, const vec<Int>& cs)
 { // find the smallest sum of a subset of cs that is greater that bound
@@ -777,6 +801,10 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (opt_verbosity >= 1) sat_solver.printVarsCls();
         return;
     }
+#if defined(GLUCOSE3) || defined(GLUCOSE4)    
+    if (opt_verbosity >= 1) sat_solver.verbEveryConflicts = 100000;
+    sat_solver.setIncrementalMode();
+#endif
     if (goal == NULL) { opt_maxsat_msu = false; solve(cmd); return; }
     // Convert constraints:
     pb_n_vars = nVars();
@@ -785,7 +813,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     // Freeze goal function variables (for SatELite):
     for (int i = 0; i < goal->size; i++)
         sat_solver.setFrozen(var((*goal)[i]), true);
-    sat_solver.verbosity = opt_verbosity;
+    sat_solver.verbosity = opt_verbosity - 1;
 
     Int goal_gcd = (*goal)(0);
     for (int i = 1; i < goal->size; ++i) goal_gcd = gcd(goal_gcd, (*goal)(i));
@@ -800,7 +828,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     if (opt_polarity_sug != 0){
         for (int i = 0; i < goal->size; i++){
             bool dir = (*goal)(i)*opt_polarity_sug > 0 ? !sign((*goal)[i]) : sign((*goal)[i]);
-            sat_solver.setPolarity(var((*goal)[i]), /*lbool*/(dir));
+            sat_solver.setPolarity(var((*goal)[i]), LBOOL(dir));
         }
     }
 
@@ -823,12 +851,16 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     vec<Lit> goal_ps;
     Minisat::vec<Lit> assump_ps;
     vec<Int> goal_Cs, assump_Cs, sorted_assump_Cs, saved_constrs_Cs;
+    vec<Pair<Int, bool> > sum_sorted_soft_cls;
     bool    sat = false, weighted_instance = true;
     Minisat::Lit inequality = lit_Undef, max_assump = lit_Undef;
     Int     try_lessthan = opt_goal, max_assump_Cs = Int_MIN;
     int     n_solutions = 0;    // (only for AllSolutions mode)
     vec<Pair<Lit,Int> > psCs;
     vec<Pair<Int,Lit> > Csps;
+    vec<bool> multi_level_opt;
+    bool opt_delay_init_constraints = false, 
+         opt_core_minimization = (nClauses() > 0 || soft_cls.size() < 100000);
 
     Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
     int j = 0;
@@ -880,10 +912,25 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         soft_cls.clear();
     } else {
         for (int i = soft_cls.size() - 1; i >= 0; i--) 
-            for (int j = soft_cls[i].snd->size() - 1; j >= 0; j--) sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
-        max_assump_Cs = sorted_assump_Cs.last();
-        sorted_assump_Cs.pop();
+            for (int j = soft_cls[i].snd->size() - 1; j >= 0; j--) 
+                sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
         sort(soft_cls);
+        Int sum = 0;
+        int ml_opt = 0;
+        multi_level_opt.push(false); sum_sorted_soft_cls.push(Pair_new(0, true));
+        for (int i = 0, cnt = 0, sz = sorted_assump_Cs.size(), j = 1; j < sz; j++) {
+            while (i < Csps.size() && Csps[i].fst < sorted_assump_Cs[j]) sum += Csps[i++].fst, cnt++;
+                sum_sorted_soft_cls.push(Pair_new(sum, cnt > j * sz / 2));
+                multi_level_opt.push(sum < sorted_assump_Cs[j]);
+                if (multi_level_opt.last()) ml_opt++;
+        }
+        if (ml_opt >= 2 || !opt_to_bin_search && ml_opt >= 1) opt_lexicographic = true;
+        if (opt_verbosity >= 1 && ml_opt > 0) 
+            reportf("Boolean lexicographic optimization can be done in %d point(s).%s\n", 
+                    ml_opt, (opt_lexicographic ? "" : " Try -lex-opt option."));
+        max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop();
+        if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
+            max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
         int start = soft_cls.size() - 1;
         while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
         start++;
@@ -900,11 +947,16 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     }
     if (psCs.size() > 0) max_assump = psCs.last().fst;
     if (opt_verbosity >= 1)
-        sat_solver.printVarsCls(goal_ps.size() > 0);
+        sat_solver.printVarsCls(goal_ps.size() > 0, &soft_cls);
     while (1) {
       if (asynch_interrupt) { reportf("Interrupted ***\n"); break; }
-//printf("LB = %s, UB = %s, try = %s, fix = %s, ps.sz = %d, ass.sz = %d, ass.sz+scl.sz = %d constrs.size = %d conflicts = %lu, rvar = %d\n", toString(LB_goalvalue), toString(UB_goalvalue), toString(try_lessthan), toString(fixed_goalval), goal_ps.size(), assump_ps.size(), assump_ps.size()+soft_cls.size(), saved_constrs.size(), sat_solver.conflicts, toInt(inequality));
       if (sat_solver.solve(assump_ps)) { // SAT returned
+        if (opt_minimization == 1 && opt_delay_init_constraints) {
+            opt_delay_init_constraints = false;
+            convertPbs(false);
+            constrs.clear();
+            continue;
+        }
         Int lastCs = 1;
         if(opt_minimization != 1 && assump_ps.size() == 1 && assump_ps.last() == inequality) {
           addUnit(inequality);
@@ -937,7 +989,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 best_goalvalue = goalvalue;
                 best_model.clear(); model.copyTo(best_model);
             }
-            Int goal_diff = best_goalvalue - evalPsCs(goal_ps, goal_Cs, sat_solver.model);
+            Int goal_diff = best_goalvalue - evalPsCs(goal_ps, goal_Cs, best_model);
             if (best_goalvalue < UB_goalvalue) {
                 UB_goalvalue = best_goalvalue;
                 char* tmp = toString(best_goalvalue * goal_gcd);
@@ -947,10 +999,17 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 xfree(tmp); }
 
             if (cmd == sc_FirstSolution || (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) && sorted_assump_Cs.size() == 0) break;
-
             if (opt_minimization == 1) {
-                max_assump_Cs = sorted_assump_Cs.last();
-                sorted_assump_Cs.pop();
+                if (opt_lexicographic && multi_level_opt[sorted_assump_Cs.size()]) {
+                    Int bound = sum_sorted_soft_cls[sorted_assump_Cs.size()].fst;
+                    for (int i = 0; i < assump_ps.size(); i++)
+                        if (assump_Cs[i] > bound)
+                            addUnit(assump_ps[i]), assump_Cs[i] = -assump_Cs[i];
+                    if (opt_verbosity > 0) reportf("Boolean lexicographic optimization - done.\n");
+                }
+                max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop();
+                if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
+                    max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
                 int start = soft_cls.size() - 1;
                 while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
                 start++;
@@ -974,25 +1033,36 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 inequality = lit_Undef;
                 try_lessthan = best_goalvalue;
             } else {
-                inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars), true);
+                inequality = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
                 try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
             }
             if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, inequality))
                 break; // unsat
-            if (inequality != lit_Undef) assump_ps.push(inequality), assump_Cs.push(opt_minimization == 2 ? try_lessthan : lastCs);
+            if (inequality != lit_Undef) {
+                sat_solver.setFrozen(var(inequality),true);
+                assump_ps.push(inequality), assump_Cs.push(opt_minimization == 2 ? try_lessthan : lastCs);
+            }
             convertPbs(false);
         }
       } else { // UNSAT returned
         if (assump_ps.size() == 0) break;
-//printf("CONFLICT(%d): ",sat_solver.conflict.size()); for (int i=0; i < sat_solver.conflict.size() && sat_solver.conflict[i] > max_assump; i++) printf("%d ",toInt(sat_solver.conflict[i])); printf("\n");
-//printf("SAVED CONSTR\n"); for (int i=0; i < saved_constrs.size(); i++, putchar('\n')) {
-//printf("CONSTR[%d]: %d %s ", i, toInt(saved_constrs[i]->lit), toString(saved_constrs[i]->lo)); 
-//for (int j = 0; j < saved_constrs[i]->size; j++) printf("%d ", toInt((*saved_constrs[i])[j])); 
-//putchar('\n');}
-        if (sat_solver.conflict.size() > 20) 
-            core_minimization(sat_solver, 20, log2(sat_solver.conflict.size()));
-        if (sat_solver.conflict.size() > 0 && sat_solver.conflict.size() < 6) 
-            sat_solver.addClause(sat_solver.conflict);
+        Minisat::vec<Lit> core_mus;
+        if (opt_core_minimization) {
+            if (weighted_instance) {
+                vec<Pair<Pair<Int, int>, Lit> > Cs_mus;
+                for (int i = 0; i < sat_solver.conflict.size(); i++) {
+                    Lit p = ~sat_solver.conflict[i];
+                    int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
+                    Cs_mus.push(Pair_new(Pair_new((j>=0 && j<assump_ps.size() && p==assump_ps[j]? assump_Cs[j] : 0),i),p));
+                }
+                sort(Cs_mus);
+                for (int i = 0; i < Cs_mus.size(); i++) core_mus.push(Cs_mus[i].snd);
+            } else
+                for (int i = 0; i < sat_solver.conflict.size(); i++) core_mus.push(~sat_solver.conflict[i]);
+            core_minimization(sat_solver, core_mus);
+        } else
+            for (int i = 0; i < sat_solver.conflict.size(); i++) core_mus.push(sat_solver.conflict[i]);
+        if (core_mus.size() > 0 && core_mus.size() < 6) sat_solver.addClause(core_mus);
         Int min_removed = Int_MAX, min_bound = Int_MAX;
         int removed = 0;
         bool other_conflict = false;
@@ -1000,8 +1070,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (opt_minimization == 1) { 
             goal_ps.clear(); goal_Cs.clear();
         }
-        for (int i = 0; i < sat_solver.conflict.size(); i++) {
-            Minisat::Lit p = ~sat_solver.conflict[i];
+        for (int i = 0; i < core_mus.size(); i++) {
+            Lit p = ~core_mus[i];
             int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
             if (j >= 0 && j < assump_ps.size() && p == assump_ps[j]) { 
                 if (opt_minimization == 1 || p <= max_assump) {
@@ -1024,7 +1094,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                         int k = assump_map.at(toInt(p));
                         if (k >= 0 && k < saved_constrs.size() &&  saved_constrs[k] != NULL && saved_constrs[k]->lit == p) {
                             if (saved_constrs[k]->lo > 1) {
-                                Lit newp = mkLit(sat_solver.newVar(true, !opt_branch_pbvars), true);
+                                Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
+                                sat_solver.setFrozen(var(newp),true);
                                 --saved_constrs[k]->lo; saved_constrs[k]->lit = newp;
                                 assump_ps.push(newp); assump_Cs.push(saved_constrs_Cs[k]);
                                 constrs.push(saved_constrs[k]);
@@ -1052,74 +1123,86 @@ void PbSolver::maxsat_solve(solve_Command cmd)
 
         Int goal_diff = best_goalvalue == Int_MAX || opt_minimization == 2 ? fixed_goalval : best_goalvalue - evalPsCs(goal_ps, goal_Cs, best_model);
         if (opt_minimization == 1) {
-            inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars), true);
+            inequality = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
             try_lessthan = goal_diff + 2;
 	} else if (opt_minimization == 0 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
             inequality = lit_Undef;
 	    try_lessthan = (best_goalvalue != Int_MAX ? best_goalvalue : UB_goalvalue+1);
 	} else {
-	    inequality = mkLit(sat_solver.newVar(true, !opt_branch_pbvars), true);
+	    inequality = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
 	    try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 	}
  
         if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, inequality))
             break; // unsat
         if (inequality != lit_Undef) {
+            sat_solver.setFrozen(var(inequality),true);
             assump_ps.push(inequality); assump_Cs.push(opt_minimization == 2 ? try_lessthan : 
                                                        min_removed != Int_MAX && min_removed != 0 ? min_removed : 1);
         }
-        if (constrs.size() > 0) convertPbs(false);
+        if (constrs.size() > 0 && (opt_minimization != 1 || !opt_delay_init_constraints)) convertPbs(false);
         if (opt_minimization == 1) {
             if (constrs.size() > 0 && constrs.last()->lit == inequality)
                 saved_constrs.push(constrs.last()), assump_map.set(toInt(inequality),saved_constrs.size() - 1),
                 saved_constrs_Cs.push(assump_Cs.last());
-            int j = 0;
-            for (int i = 0; i < saved_constrs.size(); i++)
-                if (saved_constrs[i] != NULL) {
-                    if (saved_constrs[i]->lo == 1 && saved_constrs[i]->hi == Int_MAX) {
-                        saved_constrs[i]->~Linear();
-                        saved_constrs[i] = NULL;
-                    } else {
-                        if (j < i) {
-                            saved_constrs[j] = saved_constrs[i],  saved_constrs[i] = NULL, saved_constrs_Cs[j] = saved_constrs_Cs[i];
-                            if (saved_constrs[j]->lit != lit_Undef) assump_map.set(toInt(saved_constrs[j]->lit), j); 
+            if (!opt_delay_init_constraints) {
+                int j = 0;
+                for (int i = 0; i < saved_constrs.size(); i++)
+                    if (saved_constrs[i] != NULL) {
+                        if (saved_constrs[i]->lo == 1 && saved_constrs[i]->hi == Int_MAX) {
+                            saved_constrs[i]->~Linear();
+                            saved_constrs[i] = NULL;
+                        } else {
+                            if (j < i) {
+                                saved_constrs[j] = saved_constrs[i],  saved_constrs[i] = NULL, saved_constrs_Cs[j] = saved_constrs_Cs[i];
+                                if (saved_constrs[j]->lit != lit_Undef) assump_map.set(toInt(saved_constrs[j]->lit), j); 
+                            }
+                            j++;
+                        }
+                    }
+                if (j < saved_constrs.size()) 
+                    saved_constrs.shrink(saved_constrs.size() - j), saved_constrs_Cs.shrink(saved_constrs_Cs.size() - j);
+                constrs.clear();
+            }
+        }
+        if (opt_minimization >= 1 && opt_verbosity >= 2) 
+            reportf("Lower bound  = %s\n", toString(LB_goalvalue));
+        if (opt_minimization == 1 && opt_to_bin_search &&
+                Minisat::cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
+            int cnt = 0;
+            for (int j = 0, i = 0; i < psCs.size(); i++) {
+                if (j == assump_ps.size() || psCs[i].fst < assump_ps[j] || psCs[i].fst == assump_ps[j] && psCs[i].snd > assump_Cs[j])
+                    if (++cnt >= 50000) { opt_to_bin_search = false; break; }
+                if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) j++;
+            }
+            if (opt_to_bin_search) {
+                for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
+                    sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
+                goal_ps.clear(); goal_Cs.clear();
+                int k = 0;
+                for (int j = 0, i = 0; i < psCs.size(); i++) {
+                    if (j == assump_ps.size() || psCs[i].fst < assump_ps[j] || 
+                            psCs[i].fst == assump_ps[j] && psCs[i].snd > assump_Cs[j])
+                        goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
+                    if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) {
+                        if (psCs[i].snd == assump_Cs[j]) { 
+                            if (k < j) assump_ps[k] = assump_ps[j], assump_Cs[k] = assump_Cs[j];
+                            k++;
                         }
                         j++;
                     }
                 }
-            if (j < saved_constrs.size()) 
-                saved_constrs.shrink(saved_constrs.size() - j), saved_constrs_Cs.shrink(saved_constrs_Cs.size() - j);
-            constrs.clear();
-        }
-        if (opt_minimization >= 1 && opt_verbosity >= 2) 
-            reportf("Lower bound  = %s\n", toString(LB_goalvalue));
-        if (opt_minimization == 1 && (weighted_instance && sat_solver.conflicts > 25000 ||
-                                     !weighted_instance && Minisat::cpuTime() >= opt_unsat_cpu) ) {
-            for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
-                sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
-            goal_ps.clear(); goal_Cs.clear();
-            int k = 0;
-            for (int j = 0, i = 0; i < psCs.size(); i++) {
-                if (j == assump_ps.size() || psCs[i].fst < assump_ps[j] || psCs[i].fst == assump_ps[j] && psCs[i].snd > assump_Cs[j])
-                    goal_ps.push(~psCs[i].fst), goal_Cs.push(psCs[i].snd);
-                if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) {
-                    if (psCs[i].snd == assump_Cs[j]) { 
-                        if (k < j) assump_ps[k] = assump_ps[j], assump_Cs[k] = assump_Cs[j];
-                        k++;
-                    }
-                    j++;
+                if (k < assump_ps.size()) assump_ps.shrink(assump_ps.size() - k), assump_Cs.shrink(assump_Cs.size() - k);
+                for (int i = 0; i < soft_cls.size(); i++) { 
+                    if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd);
+                    delete soft_cls[i].snd;
                 }
+                soft_cls.clear();
+                if (opt_verbosity >= 1) {
+                    reportf("Switching to binary search ... (after %g s and %d conflicts) with %d goal literals\n", Minisat::cpuTime(), sat_solver.conflicts, cnt);
+                }
+                opt_minimization = 2; opt_bin_percent = 60;
             }
-            if (k < assump_ps.size()) assump_ps.shrink(assump_ps.size() - k), assump_Cs.shrink(assump_Cs.size() - k);
-            for (int i = 0; i < soft_cls.size(); i++) { 
-                if (soft_cls[i].snd->size() > 1) sat_solver.addClause(*soft_cls[i].snd);
-                delete soft_cls[i].snd;
-            }
-            soft_cls.clear();
-            if (opt_verbosity >= 1) {
-                reportf("Switching to binary search ... (after %g s and %d conflicts)\n", Minisat::cpuTime(), sat_solver.conflicts);
-            }
-            opt_minimization = 2;
         }
       }         
         if (weighted_instance && sat && sat_solver.conflicts > 10000) { // hardening soft clauses with large weights
@@ -1132,7 +1215,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                     assump_Cs[j] = -assump_Cs[j]; // mark a corresponding assumption to be deleted
             }
             if (lst_size > Csps.size()) {
-                if (opt_verbosity > 0) reportf("Hardened %d soft clauses (after %d conflicts)\n", lst_size - Csps.size(), sat_solver.conflicts);
+                if (opt_verbosity > 0) reportf("Hardened %d soft clauses\n", lst_size - Csps.size());
                 int removed, j = 0;
                 for (int i = 0; i < assump_ps.size(); i++)
                     if (assump_Cs[i] > 0) {
@@ -1182,6 +1265,54 @@ void PbSolver::printStats()
     printf("c conflict literals      : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
     if (mem_used != 0) printf("c Memory used            : %.2f MB\n", mem_used);
     printf("c CPU time               : %g s\n", cpu_time);
-    printf("c Constr Enc: Srt/BDD/Add: %llu %llu %llu\n", srtEncodings, bddEncodings, addEncodings);
-    printf("c OptExp Enc: Srt/BDD/Add: %llu %llu %llu\n", srtOptEncodings, bddOptEncodings, addOptEncodings);
+    if (srtEncodings != 0 || bddEncodings != 0 || addEncodings != 0)
+        printf("c Constr Enc: Srt/BDD/Add: %llu %llu %llu\n", srtEncodings, bddEncodings, addEncodings);
+    if (srtOptEncodings != 0 || bddOptEncodings != 0 || addOptEncodings != 0)
+        printf("c OptExp Enc: Srt/BDD/Add: %llu %llu %llu\n", srtOptEncodings, bddOptEncodings, addOptEncodings);
+}
+
+static Var mapVar(Var x, Minisat::vec<Var>& map, Var& max)
+{
+    if (map.size() <= x || map[x] == -1){
+        map.growTo(x+1, -1);
+        map[x] = max++;
+    }
+    return map[x];
+}
+
+
+void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<Int, Minisat::vec<Lit>* > > *soft_cls)
+{
+    Minisat::vec<Var> map; Var max=0;
+    int cnt, soft_cnt = 0 ;
+
+    if (!ok) max=1, cnt=2;
+    else {
+        cnt = assumptions.size();
+        for (int i = 0; i < clauses.size(); i++)
+          if (!satisfied(ca[clauses[i]])) {
+	      cnt++;
+              Minisat::Clause& c = ca[clauses[i]];
+	      for (int j = 0; j < c.size(); j++)
+	          if (value(c[j]) != l_False)
+	              mapVar(var(c[j]), map, max);
+        }
+        if (soft_cls != NULL)
+            for (int i = 0; i < soft_cls->size(); i++) {
+                soft_cnt++;
+                Minisat::vec<Lit>& c = *(*soft_cls)[i].snd;
+                for (int j = 0; j < c.size(); j++)
+	            if (value(c[j]) != l_False)
+	                mapVar(var(c[j]), map, max);
+            }
+
+    }
+    printf("c ============================[ %s Statistics ]============================\n", 
+            encoding ? "Encoding" : " Problem");
+    printf("c |  Number of variables:  %12d                                         |\n", max);
+    if (soft_cnt == 0)
+        printf("c |  Number of clauses:    %12d                                         |\n", cnt);
+    else
+        printf("c |  Number of clauses:    %12d (incl. %12d soft in queue)      |\n", cnt + soft_cnt, soft_cnt);
+    printf("c ===============================================================================\n");
 }

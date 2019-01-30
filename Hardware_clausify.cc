@@ -113,7 +113,10 @@ Lit Clausifier::polarityClausify(Formula f)
     }else if (vmapp.at(f) != lit_Undef && !s.isEliminated(var(vmapp.at(f)))){
         result = vmapp.at(f);
     }else{
-#if 1
+#ifdef MINISAT
+        result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
+            mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(l_Undef, !opt_branch_pbvars));
+#elif 1
         result = vmapp.at(~f) != lit_Undef && !s.isEliminated(var(vmapp.at(~f))) ?
             mkLit(var(vmapp.at(~f))) : mkLit(s.newVar(true /*l_Undef*/, !opt_branch_pbvars));
 #else
@@ -242,7 +245,11 @@ Lit Clausifier::basicClausify(Formula f)
     }else if (vmap.at(f) != var_Undef && !s.isEliminated(vmap.at(f))){
         result = vmap.at(f);
     }else{
+#ifdef MINISAT
+        result = s.newVar(l_Undef, !opt_branch_pbvars);
+#else
         result = s.newVar(true /*l_Undef*/, !opt_branch_pbvars);
+#endif
         Lit p  = mkLit(result);
         if (Bin_p(f)){
 

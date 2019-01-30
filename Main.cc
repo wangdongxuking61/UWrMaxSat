@@ -26,7 +26,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 
 #include <unistd.h>
 #include <signal.h>
-#include "minisat/utils/System.h"
+#include "System.h"
 #include "PbSolver.h"
 #include "PbParser.h"
 #include "FEnv.h"
@@ -63,7 +63,9 @@ int      opt_minimization  = -1; // -1 = to be set, 0 = sequential. 1 = alternat
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
 bool     opt_maxsat_msu    = true;
-double   opt_unsat_cpu     = 240; // in seconds
+double   opt_unsat_cpu     = 300; // in seconds
+bool     opt_lexicographic = false;
+bool     opt_to_bin_search = true;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -125,6 +127,8 @@ cchar* doc =
     "MaxSAT specific options:\n"
     "  -no-msu       Use PB specific search algoritms for MaxSAT (see -alt, -bin, -seq).\n"
     "  -unsat-cpu=   Time to switch UNSAT search strategy to SAT/UNSAT. [def: %g s]\n"
+    "  -lex-opt      Do Boolean lexicographic optimizations on soft clauses.\n"
+    "  -no-bin       Do not switch from UNSAT to SAT/UNSAT search strategy.\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -200,6 +204,8 @@ void parseOptions(int argc, char** argv)
 
             else if (oneof(arg, "of,old-fmt" )) opt_old_format = true;
             else if (oneof(arg, "m,maxsat"  )) opt_maxsat  = true, opt_seq_thres = 3;
+            else if (oneof(arg, "lex-opt"   )) opt_lexicographic = true;
+            else if (oneof(arg, "no-bin"    )) opt_to_bin_search = false;
 
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;
@@ -366,18 +372,18 @@ int main(int argc, char** argv)
     if (opt_cpu_lim != INT32_MAX) {
         reportf("Setting cpu limit to %ds.\n",opt_cpu_lim);
         signal(SIGXCPU, SIGTERM_handler); 
-        Minisat::limitTime(opt_cpu_lim);
+        limitTime(opt_cpu_lim);
     }
     if (opt_mem_lim != INT32_MAX) {
         reportf("Setting memory limit to %dMB.\n",opt_mem_lim);
         signal(SIGSEGV, SIGTERM_handler); 
         signal(ENOMEM, SIGTERM_handler); 
         signal(SIGABRT, SIGTERM_handler);
-        Minisat::limitMemory(opt_mem_lim);
+        limitMemory(opt_mem_lim);
     }
     increase_stack_size(256); // to at least 256MB - M. Piotrow 16.10.2017
     if (opt_maxsat || opt_input != NULL && strcmp(opt_input+strlen(opt_input)-4, "wcnf") == 0) {
-        opt_maxsat = true;
+        opt_maxsat = true; opt_seq_thres = 3;
         if (opt_minimization < 0) opt_minimization = 1; // alt (unsat based) algorithm
         if (opt_verbosity >= 1) reportf("Parsing MaxSAT file...\n");
         parse_WCNF_file(opt_input, *pb_solver);

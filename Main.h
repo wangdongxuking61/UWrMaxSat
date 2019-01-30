@@ -55,6 +55,8 @@ extern int      opt_seq_thres;
 extern int      opt_bin_percent;
 extern bool     opt_maxsat_msu;
 extern double   opt_unsat_cpu;
+extern bool     opt_lexicographic;
+extern bool     opt_to_bin_search;
 
 // -- files:
 extern char*    opt_input;
