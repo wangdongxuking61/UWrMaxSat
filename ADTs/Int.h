@@ -72,6 +72,7 @@ public:
 
     Int  operator -  ()          const {A1 return Int(-data); }
     Int& operator ++ ()                {A1 ++data; return *this; }
+    Int& operator -- ()                {A1 --data; return *this; }
     Int& operator -= (Int other)       {A2 data -= other.data; return *this; }
     Int& operator += (Int other)       {A2 data += other.data; return *this; }
     Int& operator *= (Int other)       {A2 data *= other.data; return *this; }

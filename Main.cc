@@ -278,20 +278,19 @@ void outputResult(const PbSolver& S, bool optimum = true)
 {
     if (!opt_satlive) return;
 
-    if (optimum){
-        if (S.best_goalvalue == Int_MAX) printf("s UNSATISFIABLE\n");
-        else                             printf("s OPTIMUM FOUND\n");
-    }else{
-        if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
-        else                             printf("s SATISFIABLE\n");
-    }
-
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         printf("v");
         for (int i = 0; i < S.best_model.size(); i++)
             if (S.index2name[i][0] != '#')
                 printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
         printf("\n");
+    }
+    if (optimum){
+        if (S.best_goalvalue == Int_MAX) printf("s UNSATISFIABLE\n");
+        else                             printf("s OPTIMUM FOUND\n");
+    }else{
+        if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
+        else                             printf("s SATISFIABLE\n");
     }
     fflush(stdout);
 }
