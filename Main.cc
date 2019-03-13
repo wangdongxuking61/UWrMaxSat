@@ -66,6 +66,7 @@ bool     opt_maxsat_msu    = true;
 double   opt_unsat_cpu     = 300; // in seconds
 bool     opt_lexicographic = false;
 bool     opt_to_bin_search = true;
+bool     opt_maxsat_prepr  = true;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -129,6 +130,7 @@ cchar* doc =
     "  -unsat-cpu=   Time to switch UNSAT search strategy to SAT/UNSAT. [def: %g s]\n"
     "  -lex-opt      Do Boolean lexicographic optimizations on soft clauses.\n"
     "  -no-bin       Do not switch from UNSAT to SAT/UNSAT search strategy.\n"
+    "  -no-ms-pre    Do not preprocess soft clauses (detect unit/am1 cores).\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -206,6 +208,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "m,maxsat"  )) opt_maxsat  = true, opt_seq_thres = 3;
             else if (oneof(arg, "lex-opt"   )) opt_lexicographic = true;
             else if (oneof(arg, "no-bin"    )) opt_to_bin_search = false;
+            else if (oneof(arg, "no-ms-pre" )) opt_maxsat_prepr = false;
 
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;

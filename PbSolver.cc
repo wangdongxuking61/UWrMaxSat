@@ -621,7 +621,7 @@ void PbSolver::solve(solve_Command cmd)
 
             best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
             if (opt_satlive || opt_verbosity == 0) { 
-                printf("o %s\n", toString(best_goalvalue * goal_gcd)); fflush(stdout); }
+                char *tmp; printf("o %s\n", tmp = toString(best_goalvalue * goal_gcd)); fflush(stdout); xfree(tmp); }
             if (cmd == sc_FirstSolution) break;
 
             if (opt_verbosity >= 1 && !opt_satlive){
@@ -667,8 +667,8 @@ void PbSolver::solve(solve_Command cmd)
 
 	  assump_ps.push(assump_lit);
 	}
-        if (opt_minimization >= 1 && opt_verbosity >= 2)
-            reportf("Lower bound  = %s\n", toString(LB_goalvalue));
+        if (opt_minimization >= 1 && opt_verbosity >= 2) {
+            char *tmp; reportf("Lower bound  = %s\n", tmp = toString(LB_goalvalue)); xfree(tmp); }
         convertPbs(false);
       }         
     } // END OF LOOP

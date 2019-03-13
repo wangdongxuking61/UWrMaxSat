@@ -57,6 +57,8 @@ extern bool     opt_maxsat_msu;
 extern double   opt_unsat_cpu;
 extern bool     opt_lexicographic;
 extern bool     opt_to_bin_search;
+extern bool     opt_maxsat_prepr;
+
 
 // -- files:
 extern char*    opt_input;
