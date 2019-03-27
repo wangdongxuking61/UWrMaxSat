@@ -329,8 +329,9 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         skipEndOfLine(in);
         if (ps.size() == 1) {
             if (weight < hard_bound) {
-                gvars++,gps.push(~ps.last()), gCs.push(weight);
-                solver.storeSoftClause(ps, weight);
+                gvars++;
+                if (!opt_maxsat_msu) gps.push(~ps.last()), gCs.push(weight);
+                solver.storeSoftClause(ps, tolong(weight));
             } else if (!solver.addClause(ps))
                 return false;
         } else {
@@ -338,21 +339,21 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
                 gvars++;
                 tmp.clear(); tmp.growTo(15,0);
                 sprintf(&tmp[0],"#%d",gvars);
-                ps.push(mkLit(solver.getVar(tmp))); gps.push(ps.last());
-                gCs.push(weight);
-                solver.storeSoftClause(ps, weight);
+                ps.push(mkLit(solver.getVar(tmp))); 
+                if (!opt_maxsat_msu) gps.push(ps.last()), gCs.push(weight);
+                solver.storeSoftClause(ps, tolong(weight));
             } else if (!solver.addClause(ps))
                 return false;
         }
         ps.clear();
     }
-    if (gvars == 0) {
+    if (gvars == 0 && !opt_maxsat_msu) {
         tmp.clear(); tmp.growTo(15,0);
         sprintf(&tmp[0],"#%d",1);
         gps.push(mkLit(solver.getVar(tmp)));
         gCs.push(one);
     }
-    solver.addGoal(gps, gCs);
+    if (!opt_maxsat_msu) solver.addGoal(gps, gCs);
     return true;
 }
 

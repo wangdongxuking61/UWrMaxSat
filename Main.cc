@@ -63,7 +63,7 @@ int      opt_minimization  = -1; // -1 = to be set, 0 = sequential. 1 = alternat
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
 bool     opt_maxsat_msu    = true;
-double   opt_unsat_cpu     = 300; // in seconds
+double   opt_unsat_cpu     = 420; // in seconds
 bool     opt_lexicographic = false;
 bool     opt_to_bin_search = true;
 bool     opt_maxsat_prepr  = true;
@@ -407,7 +407,7 @@ int main(int argc, char** argv)
         pb_solver->solve(convert(opt_command));
     }
 
-    if (pb_solver->goal == NULL && pb_solver->best_goalvalue != Int_MAX)
+    if (pb_solver->goal == NULL && pb_solver->soft_cls.size() == 0 && pb_solver->best_goalvalue != Int_MAX)
         opt_command = cmd_FirstSolution;    // (otherwise output will be wrong)
     if (!pb_solver->okay())
         opt_command = cmd_Minimize;         // (HACK: Get "UNSATISFIABLE" as output)

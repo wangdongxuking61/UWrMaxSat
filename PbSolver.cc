@@ -723,10 +723,10 @@ static Var mapVar(Var x, Minisat::vec<Var>& map, Var& max)
 }
 
 
-void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<Int, Minisat::vec<Lit>* > > *soft_cls)
+void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls, int soft_cnt)
 {
     Minisat::vec<Var> map; Var max=0;
-    int cnt, soft_cnt = 0 ;
+    int cnt;
 
     if (!ok) max=1, cnt=2;
     else {
@@ -741,7 +741,6 @@ void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<Int, Minisat::vec
         }
         if (soft_cls != NULL)
             for (int i = 0; i < soft_cls->size(); i++) {
-                soft_cnt++;
                 Minisat::vec<Lit>& c = *(*soft_cls)[i].snd;
                 for (int j = 0; j < c.size(); j++)
 	            if (value(c[j]) != l_False)

@@ -93,6 +93,7 @@ public:
 
     friend char* toString(Int num) { char buf[32]; sprintf(buf, "%lld", num.data); return xstrdup(buf); }   // Caller must free string.
     friend int   toint   (Int num) { if (num > INT_MAX || num < INT_MIN) throw Exception_IntOverflow(xstrdup("toint")); return (int)num.data; }
+    friend long  tolong  (Int num) { if (num > LONG_MAX || num < LONG_MIN) throw Exception_IntOverflow(xstrdup("tolong")); return (long int)num.data; }
 };
 
 
@@ -138,6 +139,11 @@ public:
     }
 
     Int(int x) {
+        data = xmalloc<mpz_t>(1); assert(((intp)data & 1) == 0);
+        mpz_init_set_si(*data, x);
+    }
+
+    Int(int64_t x) {
         data = xmalloc<mpz_t>(1); assert(((intp)data & 1) == 0);
         mpz_init_set_si(*data, x);
     }
@@ -262,6 +268,12 @@ public:
         if (num.small() || !mpz_fits_sint_p(*num.data))
             throw Exception_IntOverflow(xstrdup("toint"));
         return (int)mpz_get_si(*num.data);
+    }
+
+    friend long tolong (Int num) {
+        if (num.small() || !mpz_fits_slong_p(*num.data))
+            throw Exception_IntOverflow(xstrdup("tolong"));
+        return (long int)mpz_get_si(*num.data);
     }
 
     uint hash() const {   // primitive hash function -- not good with bit-shifts
