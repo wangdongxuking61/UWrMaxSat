@@ -25,6 +25,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Map.h"
 #include "StackAlloc.h"
+#include <queue>
 
 #if defined(GLUCOSE3) || defined(GLUCOSE4)
 namespace Minisat = Glucose;
@@ -195,7 +196,8 @@ public:
     void    solve(solve_Command cmd = sc_Minimize);        // Returns best/first solution found or Int_MAX if UNSAT.
     int     optimize_last_constraint(SimpSolver& sat_solver, vec<Linear*>& constrs);
     void    maxsat_solve(solve_Command cmd = sc_Minimize); 
-    void    preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, Int& LB_goalvalue, const Lit max_assump);
+    void    preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, Int& LB_goalvalue, const Lit max_assump,
+                                           const Int& max_assump_Cs, std::priority_queue<Pair<Int, Lit> >& delayed_assump, Int& delayed_assump_sum);
 };
 
 

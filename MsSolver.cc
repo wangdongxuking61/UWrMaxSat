@@ -189,8 +189,8 @@ static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs
     //do { max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop(); 
     //} while (sorted_assump_Cs.size() > 0 && !sum_sorted_soft_cls[sorted_assump_Cs.size()].snd);
     max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop();
-    if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
-        max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
+    //if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
+    //    max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
     int start = top_for_strat - 1;
     while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
     start++;
@@ -326,6 +326,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     vec<bool> multi_level_opt;
     bool opt_delay_init_constraints = false, 
          opt_core_minimization = (nClauses() > 0 || soft_cls.size() < 100000);
+    std::priority_queue<Pair<Int, Lit> > delayed_assump;
+    Int delayed_assump_sum = 0;
 
     Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
     sort(&soft_cls[0], soft_cls.size(), LT<Pair<weight_t, Minisat::vec<Lit>*> >());
@@ -407,7 +409,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         max_assump_Cs = do_stratification(sat_solver, sorted_assump_Cs, soft_cls, top_for_strat, assump_ps, assump_Cs);
     }
     if (psCs.size() > 0) max_assump = psCs.last().fst;
-    if (opt_maxsat_prepr) preprocess_soft_cls(sat_solver, assump_ps, assump_Cs, LB_goalvalue, max_assump);
+    if (opt_minimization == 1 && opt_maxsat_prepr) 
+        preprocess_soft_cls(sat_solver, assump_ps, assump_Cs, LB_goalvalue, max_assump, max_assump_Cs, delayed_assump, delayed_assump_sum);
     if (opt_verbosity >= 1)
         sat_solver.printVarsCls(goal_ps.size() > 0, &soft_cls, top_for_strat);
 
@@ -454,7 +457,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 model.push(sat_solver.model[x] == l_True);
             for (int i = 0; i < top_for_strat; i++)
                 if (soft_cls[i].snd->size() > 1)
-                    model[var(soft_cls[i].snd->last())] = true;
+                    model[var(soft_cls[i].snd->last())] = !sign(soft_cls[i].snd->last());
             Int goalvalue = evalGoal(soft_cls, model) + fixed_goalval;
             if (goalvalue < best_goalvalue) {
                 best_goalvalue = goalvalue;
@@ -467,25 +470,48 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             } else model.clear(); 
             if (best_goalvalue < UB_goalvalue) UB_goalvalue = best_goalvalue;
 
-            if (cmd == sc_FirstSolution || (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) && sorted_assump_Cs.size() == 0) break;
+            if (cmd == sc_FirstSolution || (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) && sorted_assump_Cs.size() == 0 && delayed_assump.empty()) break;
             if (opt_minimization == 1) {
-                assert(sorted_assump_Cs.size() > 0); 
-                if (opt_lexicographic && multi_level_opt[sorted_assump_Cs.size()]) {
-                    Int bound = sum_sorted_soft_cls[sorted_assump_Cs.size()].fst;
-                    int cnt_assump = 0;
-                    for (int i = 0; i < assump_ps.size() && assump_ps[i] <= max_assump; i++)
-                        if (assump_Cs[i] > bound)
-                            addUnit(assump_ps[i]), assump_Cs[i] = -assump_Cs[i], cnt_assump++;
-                    if (cnt_assump > 0) clear_assumptions(assump_ps, assump_Cs);
-                    if (opt_verbosity > 0) reportf("Boolean lexicographic optimization - done.\n");
-                }
+                assert(sorted_assump_Cs.size() > 0 || !delayed_assump.empty()); 
                 int old_top = top_for_strat;
-                max_assump_Cs = do_stratification(sat_solver, sorted_assump_Cs, soft_cls, top_for_strat, assump_ps, assump_Cs);
+                if (delayed_assump.empty() || sorted_assump_Cs.size() > 0 && Int(sorted_assump_Cs.last()) > delayed_assump.top().fst) {
+                    if (opt_lexicographic && multi_level_opt[sorted_assump_Cs.size()]) {
+                        Int bound = sum_sorted_soft_cls[sorted_assump_Cs.size()].fst + delayed_assump_sum;
+                        int cnt_assump = 0;
+                        for (int i = 0; i < assump_ps.size() && assump_ps[i] <= max_assump; i++)
+                            if (assump_Cs[i] > bound)
+                                addUnit(assump_ps[i]), assump_Cs[i] = -assump_Cs[i], cnt_assump++;
+                        if (cnt_assump > 0) {
+                            clear_assumptions(assump_ps, assump_Cs);
+                            if (opt_verbosity > 0) reportf("Boolean lexicographic optimization - done.\n");
+                        }
+                    }
+                    max_assump_Cs = do_stratification(sat_solver, sorted_assump_Cs, soft_cls, top_for_strat, assump_ps, assump_Cs);
+                } else {
+                    max_assump_Cs = delayed_assump.top().fst;
+                    vec<Pair<Lit, Int> > new_assump;
+                    do { 
+                        new_assump.push(Pair_new(delayed_assump.top().snd, max_assump_Cs));
+                        delayed_assump_sum -= delayed_assump.top().fst;
+                        delayed_assump.pop(); 
+                    } while (!delayed_assump.empty() && delayed_assump.top().fst >= max_assump_Cs);
+                    sort(new_assump); int sz = new_assump.size();
+                    assump_ps.growTo(assump_ps.size() + sz); assump_Cs.growTo(assump_Cs.size() + sz);
+                    for (int i = assump_ps.size() - 1; i >= sz; i--)
+                        assump_ps[i] = assump_ps[i-sz], assump_Cs[i] = assump_Cs[i-sz];
+                    for (int fr = sz, to = 0, i = 0; i < new_assump.size(); i++) {
+                        Lit p = new_assump[i].fst;
+                        while (fr < assump_ps.size() && assump_ps[fr] <= p)
+                            assump_ps[to] = assump_ps[fr], assump_Cs[to++] = assump_Cs[fr++];
+                        assump_ps[to] = p; assump_Cs[to++] = new_assump[i].snd;
+                    }
+                }
+//reportf("max_assump_Cs: %s %u %d; LB = %s\n", toString(max_assump_Cs), delayed_assump.size(), sorted_assump_Cs.size(), toString(LB_goalvalue));
                 harden_soft_cls(sat_solver, assump_ps, assump_Cs, soft_cls, top_for_hard, LB_goalvalue, UB_goalvalue);
                 if (top_for_strat < old_top) {
                     try_lessthan = best_goalvalue;
                     if (opt_maxsat_prepr) 
-                        preprocess_soft_cls(sat_solver, assump_ps, assump_Cs, LB_goalvalue, max_assump);
+                        preprocess_soft_cls(sat_solver, assump_ps, assump_Cs, LB_goalvalue, max_assump, max_assump_Cs, delayed_assump, delayed_assump_sum);
                 }
                 continue;
             } else harden_soft_cls(sat_solver, assump_ps, assump_Cs, soft_cls, top_for_hard, LB_goalvalue, UB_goalvalue);
@@ -552,7 +578,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             for (int i = 0; i < assump_ps.size(); i++) {
                 if (assump_Cs[i] < 0) {
                     Minisat::Lit p = assump_ps[i];
-                    if (opt_minimization == 1 && p > max_assump && assump_Cs[i] == -min_removed) {
+                    if (opt_minimization == 1 && p > max_assump) { // && assump_Cs[i] == -min_removed) {
                         int k = assump_map.at(toInt(p));
                         if (k >= 0 && k < saved_constrs.size() &&  saved_constrs[k] != NULL && saved_constrs[k]->lit == p) {
                             if (saved_constrs[k]->lo > 1) {
@@ -569,6 +595,11 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                     }
                     if (assump_Cs[i] == -min_removed || opt_minimization != 1) continue;
                     assump_Cs[i] = -min_removed - assump_Cs[i];
+                    if (opt_minimization == 1 &&  assump_Cs[i] < max_assump_Cs ) {
+                        delayed_assump.push(Pair_new(assump_Cs[i], assump_ps[i]));
+                        delayed_assump_sum += delayed_assump.top().fst;
+                        continue;
+                    }
                 }
                 if (j < i) assump_ps[j] = assump_ps[i], assump_Cs[j] = assump_Cs[i];
                 j++;
@@ -648,14 +679,15 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
                     sat_solver.addClause(~assump_ps[i]), assump_ps.pop(), assump_Cs.pop();
                 goal_ps.clear(); goal_Cs.clear();
+                bool clear_assump = (cnt * 3 >= assump_ps.size());
                 int k = 0;
                 for (int j = 0, i = 0; i < psCs.size(); i++) {
                     const Int &w = soft_cls[psCs[i].snd].fst;
                     if (j == assump_ps.size() || psCs[i].fst < assump_ps[j] || 
-                            psCs[i].fst == assump_ps[j] && w > assump_Cs[j])
+                            psCs[i].fst == assump_ps[j] && (clear_assump || w > assump_Cs[j]))
                         goal_ps.push(~psCs[i].fst), goal_Cs.push(w);
                     if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) {
-                        if (w == assump_Cs[j]) { 
+                        if (!clear_assump && w == assump_Cs[j]) { 
                             if (k < j) assump_ps[k] = assump_ps[j], assump_Cs[k] = assump_Cs[j];
                             k++;
                         }
@@ -668,8 +700,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 }
                top_for_strat = 0; sorted_assump_Cs.clear();
                 if (opt_verbosity >= 1) {
-                    reportf("Switching to binary search ... (after %g s and %d conflicts) with %d goal literals\n", 
-                            Minisat::cpuTime(), sat_solver.conflicts, cnt);
+                    reportf("Switching to binary search ... (after %g s and %d conflicts) with %d goal literals and %d assumptions\n", 
+                            Minisat::cpuTime(), sat_solver.conflicts, cnt, assump_ps.size());
                 }
                 opt_minimization = 2;
                 if (sat) {
@@ -737,7 +769,8 @@ void set_difference(std::vector<Lit>& set1, const vec<Lit>& set2)
     if (j < set1.size()) set1.resize(j);
 }
 
-void PbSolver::preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, Int& LB_goalvalue, const Lit max_assump)
+void PbSolver::preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, Int& LB_goalvalue, const Lit max_assump,
+                                              const Int& max_assump_Cs, std::priority_queue<Pair<Int, Lit> >& delayed_assump, Int& delayed_assump_sum)
 {
     std::map<Lit,std::vector<Lit> > conns;
     vec<Lit> confl;
@@ -826,6 +859,11 @@ void PbSolver::preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& as
                     //sat_solver.addClause(assump_ps[ind[i]], r);
                     cls.push(assump_ps[ind[i]]); //~r);
                     assump_Cs[ind[i]] -= min_Cs;
+                    if (assump_Cs[i] < max_assump_Cs) {
+                        delayed_assump.push(Pair_new(assump_Cs[ind[i]], assump_ps[ind[i]]));
+                        delayed_assump_sum += delayed_assump.top().fst;
+                        assump_Cs[ind[i]] = - assump_Cs[ind[i]];
+                    }
                 }
             Lit r = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
             sat_solver.setFrozen(var(r), true);

@@ -339,7 +339,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
                 gvars++;
                 tmp.clear(); tmp.growTo(15,0);
                 sprintf(&tmp[0],"#%d",gvars);
-                ps.push(mkLit(solver.getVar(tmp))); 
+                ps.push(mkLit(solver.getVar(tmp), true)); 
                 if (!opt_maxsat_msu) gps.push(ps.last()), gCs.push(weight);
                 solver.storeSoftClause(ps, tolong(weight));
             } else if (!solver.addClause(ps))
