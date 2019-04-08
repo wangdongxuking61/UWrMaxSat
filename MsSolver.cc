@@ -29,6 +29,20 @@
 template<typename int_type>
 static int_type gcd(int_type small, int_type big) {
     return (small == 0) ? big: gcd(big % small, small); }
+
+template<typename T>
+static inline int bin_search(const Minisat::vec<T>& seq, const T& elem)
+{
+    int j = std::lower_bound(&seq[0], &seq[0] + seq.size(), elem) - &seq[0];
+    return (j >= 0 && j < seq.size() && seq[j] == elem ? j : -1);
+}
+        
+template<typename T>
+static inline int bin_search(const vec<T>& seq, const T& elem)
+{
+    int j = std::lower_bound(&seq[0], &seq[0] + seq.size(), elem) - &seq[0];
+    return (j >= 0 && j < seq.size() && seq[j] == elem ? j : -1);
+}
         
 static PbSolver *pb_solver;
 static
@@ -189,8 +203,8 @@ static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs
     //do { max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop(); 
     //} while (sorted_assump_Cs.size() > 0 && !sum_sorted_soft_cls[sorted_assump_Cs.size()].snd);
     max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop();
-    //if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
-    //    max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
+    if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
+        max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
     int start = top_for_strat - 1;
     while (start >= 0 && soft_cls[start].fst >= max_assump_Cs) start--;
     start++;
@@ -223,8 +237,8 @@ static void harden_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps
     for (int i = top_for_hard - 1; i >= 0 && soft_cls[i].fst > wbound; i--) { // hardening soft clauses with weights > the current goal interval length 
         if (soft_cls[i].fst > ub_goalvalue) sz++;
         Lit p = soft_cls[i].snd->last(); if (soft_cls[i].snd->size() > 1) p = ~p;
-        int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
-        if (j >= 0 && j < assump_ps.size() && p == assump_ps[j] && assump_Cs[j] > Ibound) {
+        int j = bin_search(assump_ps, p);
+        if (j >= 0 && assump_Cs[j] > Ibound) {
             assump_Cs[j] = -assump_Cs[j]; // mark a corresponding assumption to be deleted
             cnt_assump++; cnt_unit++; sat_solver.addClause(p);
         } else if (soft_cls[i].fst > ub_goalvalue) cnt_unit++, sat_solver.addClause(p);
@@ -506,7 +520,6 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                         assump_ps[to] = p; assump_Cs[to++] = new_assump[i].snd;
                     }
                 }
-//reportf("max_assump_Cs: %s %u %d; LB = %s\n", toString(max_assump_Cs), delayed_assump.size(), sorted_assump_Cs.size(), toString(LB_goalvalue));
                 harden_soft_cls(sat_solver, assump_ps, assump_Cs, soft_cls, top_for_hard, LB_goalvalue, UB_goalvalue);
                 if (top_for_strat < old_top) {
                     try_lessthan = best_goalvalue;
@@ -540,8 +553,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 vec<Pair<Pair<Int, int>, Lit> > Cs_mus;
                 for (int i = 0; i < sat_solver.conflict.size(); i++) {
                     Lit p = ~sat_solver.conflict[i];
-                    int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
-                    Cs_mus.push(Pair_new(Pair_new((j>=0 && j<assump_ps.size() && p==assump_ps[j]? assump_Cs[j] : 0),i),p));
+                    int j = bin_search(assump_ps, p);
+                    Cs_mus.push(Pair_new(Pair_new((j>=0 ? assump_Cs[j] : 0),i),p));
                 }
                 sort(Cs_mus);
                 for (int i = 0; i < Cs_mus.size(); i++) core_mus.push(Cs_mus[i].snd);
@@ -558,10 +571,9 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (opt_minimization == 1) { 
             goal_ps.clear(); goal_Cs.clear();
         }
-        for (int i = 0; i < core_mus.size(); i++) {
+        for (int j, i = 0; i < core_mus.size(); i++) {
             Lit p = ~core_mus[i];
-            int j = std::lower_bound(&assump_ps[0], &assump_ps[0] + assump_ps.size(), p) - &assump_ps[0];
-            if (j >= 0 && j < assump_ps.size() && p == assump_ps[j]) { 
+            if ((j = bin_search(assump_ps, p)) >= 0) { 
                 if (opt_minimization == 1 || p <= max_assump) {
                     goal_ps.push(~p), goal_Cs.push(opt_minimization == 1 ? 1 : assump_Cs[j]);
                     if (assump_Cs[j] < min_removed) min_removed = assump_Cs[j];
@@ -665,7 +677,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
         if (weighted_instance && sat && sat_solver.conflicts > 10000)
             harden_soft_cls(sat_solver, assump_ps, assump_Cs, soft_cls, top_for_hard, LB_goalvalue, UB_goalvalue);
         if (opt_minimization >= 1 && opt_verbosity >= 2) {
-            char *t; reportf("Lower bound  = %s, assump. size = %d, stratif. level = %d (cls: %d, wght: %d)\n", t=toString(LB_goalvalue * goal_gcd), assump_ps.size(), sorted_assump_Cs.size(), top_for_strat, (sorted_assump_Cs.size() > 0 ? sorted_assump_Cs.last() : 0)); xfree(t); }
+            char *t; reportf("Lower bound  = %s, assump. size = %d, stratif. level = %d (cls: %d, wght: %d)\n", t=toString(LB_goalvalue * goal_gcd), 
+                    assump_ps.size(), sorted_assump_Cs.size(), top_for_strat, (sorted_assump_Cs.size() > 0 ? sorted_assump_Cs.last() : 0)); xfree(t); }
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
                 Minisat::cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
@@ -742,9 +755,6 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     }
 }
 
-#include<vector>
-#include<algorithm>
-
 void set_difference(vec<Lit>& set1, const vec<Lit>& set2)
 {
     int j =0, k = 0;
@@ -757,100 +767,92 @@ void set_difference(vec<Lit>& set1, const vec<Lit>& set2)
     if (j < set1.size()) set1.shrink(set1.size() - j);
 }
 
-void set_difference(std::vector<Lit>& set1, const vec<Lit>& set2)
-{
-    unsigned j =0; int k = 0;
-    for (unsigned i = 0; i < set1.size(); i++) {
-        while (k < set2.size() && set2[k] < set1[i]) k++;
-        if (k < set2.size() && set1[i] == set2[k]) { k++; continue; }
-        if (j < i) set1[j] = set1[i];
-        j++;
-    }
-    if (j < set1.size()) set1.resize(j);
-}
+DefineHash(Lit, return (uint)toInt(key); )
+
+struct mapLT { Map<Lit, vec<Lit>* >&c; bool operator()(Lit p, Lit q) { return c.at(p)->size() < c.at(q)->size(); }};
 
 void PbSolver::preprocess_soft_cls(SimpSolver& sat_solver, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, Int& LB_goalvalue, const Lit max_assump,
                                               const Int& max_assump_Cs, std::priority_queue<Pair<Int, Lit> >& delayed_assump, Int& delayed_assump_sum)
 {
-    std::map<Lit,std::vector<Lit> > conns;
+    Map<Lit, vec<Lit>* > conns;
+    vec<Lit> conns_lit;
     vec<Lit> confl;
     vec<Lit> lits;
     for (int i = 0; i < assump_ps.size() && assump_ps[i] <= max_assump; i++) {
         Minisat::vec<Lit> assump, props; 
         assump.push(assump_ps[i]);
         if (sat_solver.prop_check(assump, props, 2))
-            for (int j = 0; j < props.size(); j++) {
-                int l = std::lower_bound(&assump_ps[0], &assump_ps[0]+assump_ps.size(),  ~props[j]) - &assump_ps[0]; 
-                if (l >= 0 && l < assump_ps.size() && ~props[j] == assump_ps[l] && assump_ps[l] <= max_assump) {
-                    conns[assump[0]].push_back(~props[j]);
-                    conns[~props[j]].push_back(assump[0]);
+            for (int l, j = 0; j < props.size(); j++) {
+                if ((l = bin_search(assump_ps,  ~props[j])) >= 0 && assump_ps[l] <= max_assump) {
+                    if (!conns.has(assump[0])) conns.set(assump[0],new vec<Lit>());
+                    conns.ref(assump[0])->push(~props[j]);
+                    if (!conns.has(~props[j])) conns.set(~props[j], new vec<Lit>());
+                    conns.ref(~props[j])->push(assump[0]);
                 }
             }  
         else confl.push(assump_ps[i]);
     }
+    conns.domain(conns_lit);
     if (confl.size() > 0) {
-        for (auto it = conns.begin(); it != conns.end(); ) {
-            int l = std::lower_bound(&confl[0], &confl[0]+confl.size(), it->first) - &confl[0];
-            if (l >= 0 && l < confl.size() && confl[l] == it->first)
-                it = conns.erase(it);
-            else {
-                std::sort(it->second.begin(),it->second.end());
-                it->second.erase(std::unique(it->second.begin(),it->second.end()), it->second.end());
-                set_difference(it->second, confl);
-                if (it->second.size() == 0) it = conns.erase(it);
-                else lits.push(it->first), ++it;
+        for (int i = 0; i < conns_lit.size(); i++) {
+            if (bin_search(confl, conns_lit[i]) >= 0) {
+                delete conns.ref(conns_lit[i]);
+                conns.exclude(conns_lit[i]);
+            } else {
+                vec<Lit>& dep_lit = *conns.ref(conns_lit[i]);
+                sortUnique(dep_lit);
+                set_difference(dep_lit, confl);
+                if (dep_lit.size() == 0) { delete conns.ref(conns_lit[i]); conns.exclude(conns_lit[i]); }
+                else lits.push(conns_lit[i]);
             }
         }
-        for (int i = 0; i < confl.size(); i++) {
+        conns_lit.clear(); conns.domain(conns_lit);
+        for (int l, i = 0; i < confl.size(); i++) {
             Lit p = confl[i];
-            int l = std::lower_bound(&assump_ps[0], &assump_ps[0]+assump_ps.size(), p) - &assump_ps[0];
-            if (l >= 0 && l < assump_ps.size() && assump_ps[l] == p && assump_ps[l] <= max_assump) {
+            if ((l = bin_search(assump_ps, p)) >= 0 && assump_ps[l] <= max_assump) {
                 addUnit(~p); LB_goalvalue += assump_Cs[l]; assump_Cs[l] = -assump_Cs[l];
             }
         }
         if (opt_verbosity >= 2) reportf("Found %d Unit cores\n", confl.size());
     } else
-        for (auto & it : conns) { 
-            lits.push(it.first); 
-            std::sort(it.second.begin(), it.second.end()); 
-            it.second.erase(std::unique(it.second.begin(),it.second.end()), it.second.end());
+        for (int i = 0; i < conns_lit.size(); i++) { 
+            lits.push(conns_lit[i]); 
+            sortUnique(*conns.ref(conns_lit[i])); 
         }
     sort(lits);
+    mapLT cmp {conns};
     int am1_cnt = 0, am1_len_sum = 0;
     while (lits.size() > 0) {
         vec<Lit> am1;
         Lit minl = lits[0];
-        for (unsigned sz = conns[minl].size(), i = 1; i < (unsigned)lits.size(); i++)
-            if (conns[lits[i]].size() < sz) minl = lits[i], sz = conns[minl].size();
+        for (int new_sz,  sz = conns.at(minl)->size(), i = 1; i < lits.size(); i++)
+            if ((new_sz = conns.at(lits[i])->size()) < sz) minl = lits[i], sz = new_sz;
         am1.push(minl);
-        std::sort(conns[minl].begin(), conns[minl].end(), 
-                    [&](Lit p, Lit q) { return conns[p].size() < conns[q].size(); });
-        for (Lit l : conns[minl]) {
-            int j = std::lower_bound(&lits[0], &lits[0]+lits.size(), l) - &lits[0];
-            if (j >= 0 && j < lits.size() && lits[j] == l) {
+        vec<Lit>& dep_minl = *conns.ref(minl);
+        sort(dep_minl, cmp); //  cmp(Lit p, Lit q) { return conns.at(p)->size() < conns.at(q)->size(); });
+        for (int sz = dep_minl.size(), i = 0; i < sz; i++) {
+            Lit l = dep_minl[i];
+            if (bin_search(lits, l) >= 0) {
                 int i;
-                for (i = 1; i < am1.size(); ++i)
-                    if (std::find(conns[l].begin(), conns[l].end(),am1[i]) == conns[l].end())
-                        break;
+                const vec<Lit>& dep_l = *conns.at(l);
+                for (i = 1; i < am1.size() && bin_search(dep_l, am1[i]) >= 0; ++i);
                 if (i == am1.size()) am1.push(l);
             }
         }
-        std::sort(conns[minl].begin(), conns[minl].end());
+        sort(dep_minl);
         sort(am1);
         set_difference(lits, am1);
-        for (auto &l : conns)  set_difference(l.second, am1);
+        for (int i = 0; i < conns_lit.size(); i++)  set_difference(*conns.ref(conns_lit[i]), am1);
         if (am1.size() > 1) {
             Minisat::vec<Lit> cls;
             vec<int> ind;
             Int min_Cs = Int_MAX;
-            for (int i = 0; i < am1.size(); i++) {
-                int l = std::lower_bound(&assump_ps[0], &assump_ps[0]+assump_ps.size(), am1[i]) - &assump_ps[0];
-                if (l >= 0 && l < assump_ps.size() && assump_ps[l] == am1[i] && assump_Cs[l] > 0) {
+            for (int l, i = 0; i < am1.size(); i++)
+                if ((l = bin_search(assump_ps, am1[i])) >= 0 && assump_Cs[l] > 0) {
                     ind.push(l);
                     if (assump_Cs[l] < min_Cs) min_Cs = assump_Cs[l];
                 }
-                else reportf("am1: %d %d %d %s\n", i, am1.size(), toInt(am1[0]), toInt(am1[i]), (l>=0 && l <assump_Cs.size()?toString(assump_Cs[l]):"???"));                
-            }
+                else reportf("am1: %d %d %d %s\n", i, am1.size(), toInt(am1[0]), toInt(am1[i]), (l>=0 && l <assump_Cs.size()?toString(assump_Cs[l]):"???"));
             if (ind.size() < 2) continue;
             for (int i = 0; i < ind.size(); i++)
                 if (assump_Cs[ind[i]] == min_Cs) cls.push(assump_ps[ind[i]]), assump_Cs[ind[i]] = -assump_Cs[ind[i]];
