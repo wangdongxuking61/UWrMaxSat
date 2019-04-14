@@ -92,13 +92,13 @@ Formula convertOneToBdd(const vec<Lit>& ps, const vec<Int>& Cs, Int lo, int max_
 
 Formula convertToBdd(const Linear& c, int max_cost)
 {
-  vec<Lit> ls;
-  vec<Int> Cs;
-  Int csum = 0;
-  Formula ret;
+    vec<Lit> ls;
+    vec<Int> Cs;
+    Int csum = 0;
+    Formula ret;
 
-  for (int j = 0; j < c.size; j++)
-    ls.push(c[j]), Cs.push(c(j)), csum += c(j);
+    for (int j = 0; j < c.size; j++)
+        ls.push(c[j]), Cs.push(c(j)), csum += c(j);
 
     ret = convertOneToBdd(ls, Cs, c.lo, max_cost);    
     if(ret == _undef_ ) return ret;
@@ -110,5 +110,5 @@ Formula convertToBdd(const Linear& c, int max_cost)
       ret &= convertOneToBdd(ls, Cs, csum - c.hi, max_cost);
     }
 
-  return ret == _undef_ || c.lit == lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
+    return ret == _undef_ || c.lit == lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
 }

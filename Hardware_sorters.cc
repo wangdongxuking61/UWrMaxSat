@@ -67,8 +67,10 @@ void encodeByMerger(const vec<Formula>& in1, const vec<Formula>& in2, vec<Formul
     vec<Formula> invars[4];
 
     int in1_1 = 0, in1_0 = in1.size(), in2_1 = 0, in2_0 = in2.size();
-    while (in1_1 < in1.size() && in1[in1_1] == _1_) in1_1++; while (in1_0 > 0 && in1[in1_0-1] == _0_) in1_0--;
-    while (in2_1 < in2.size() && in2[in2_1] == _1_) in2_1++; while (in2_0 > 0 && in2[in2_0-1] == _0_) in2_0--;
+    while (in1_1 < in1.size() && in1[in1_1] == _1_) in1_1++; 
+    while (in1_0 > 0 && in1[in1_0-1] == _0_) in1_0--;
+    while (in2_1 < in2.size() && in2[in2_1] == _1_) in2_1++; 
+    while (in2_0 > 0 && in2[in2_0-1] == _0_) in2_0--;
     int exchange = in1_0 - in1_1 < in2_0 - in2_1;
     int ones = in1_1 + in2_1, zeroes = in1.size() - in1_0 + in2.size() - in2_0;
     for (int i = in1_1; i < in1_0; i++) invars[exchange].push(in1[i]);
