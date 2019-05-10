@@ -156,6 +156,11 @@ public:
             mpz_init_set(*data, *src.data); }
     }
 
+    Int(Int&& src) {
+        data = src.data;
+        src.data = (mpz_t *)1;
+    }
+
    ~Int() {
         if (!small()){
             mpz_clear(*data);
@@ -175,6 +180,15 @@ public:
                 }else
                     mpz_set(*data, *other.data);
             }
+        }
+        return *this;
+    }
+
+    Int& operator = (Int&& other) {
+        if (&other != this){
+            this->~Int();
+            data = other.data;
+            other.data = (mpz_t *)1;
         }
         return *this;
     }

@@ -27,7 +27,7 @@ Read a DIMACS file and apply the SAT-solver to it.
 #include <unistd.h>
 #include <signal.h>
 #include "System.h"
-#include "PbSolver.h"
+#include "MsSolver.h"
 #include "PbParser.h"
 #include "FEnv.h"
 
@@ -43,7 +43,7 @@ bool     opt_model_out = true;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
 
 bool     opt_preprocess    = true;
-ConvertT opt_convert       = ct_Mixed;
+ConvertT opt_convert       = ct_Undef;
 ConvertT opt_convert_goal  = ct_Undef;
 bool     opt_convert_weak  = true;
 double   opt_bdd_thres     = 10;
@@ -80,9 +80,10 @@ unsigned long long int srtOptEncodings = 0, addOptEncodings = 0, bddOptEncodings
 
 cchar* doc =
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
-    "KP-MiniSat+ 1.0 by Marek Piotrów and Michał Karpiński 2018, an extension of\n"
-    "MiniSat+ 1.1, based on MiniSat 2.2.0  -- (C) Niklas Een, Niklas Sorensson, 2012\n"
-    "with COMiniSatPS by Chanseok Oh 2016 as the SAT solver\n"
+    "UWr-MiniSat+ 1.0 -- University of Wrocław MaxSAT solver by Marek Piotrów (2019)\n" 
+    "and PB solver by Marek Piotrów and Michał Karpiński (2018) -- an extension of\n"
+    "MiniSat+ 1.1, based on MiniSat 2.2.0  -- (C) Niklas Een, Niklas Sorensson (2012)\n"
+    "with COMiniSatPS by Chanseok Oh (2016) as the SAT solver\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
     "USAGE: minisatp <input-file> [<result-file>] [-<option> ...]\n"
     "\n"
@@ -274,7 +275,7 @@ void reportf(const char* format, ...)
 // Helpers:
 
 
-PbSolver*   pb_solver = NULL;   // Made global so that the SIGTERM handler can output best solution found.
+MsSolver*   pb_solver = NULL;   // Made global so that the SIGTERM handler can output best solution found.
 
 
 void outputResult(const PbSolver& S, bool optimum = true)
@@ -333,7 +334,7 @@ static void increase_stack_size(int new_size) // M. Piotrow 16.10.2017
     rl.rlim_cur = new_mem_lim;
     if (setrlimit(RLIMIT_STACK, &rl) == -1)
       reportf("WARNING! Could not set resource limit: Stack memory.\n");
-    else
+    else if (opt_verbosity > 1)
       reportf("Setting stack limit to %dMB.\n",new_size);
   }
 #else
@@ -358,10 +359,9 @@ PbSolver::solve_Command convert(Command cmd) {
 
 int main(int argc, char** argv)
 {
-    /*DEBUG*/if (argc > 1 && (strcmp(argv[1], "-debug") == 0 || strcmp(argv[1], "--debug") == 0)){ void test(); test(); exit(0); }
   try {
     parseOptions(argc, argv);
-    pb_solver = new PbSolver(opt_preprocess);
+    pb_solver = new MsSolver(opt_preprocess);
     signal(SIGINT , SIGINT_handler);
     signal(SIGTERM, SIGTERM_handler);
 
@@ -390,6 +390,7 @@ int main(int argc, char** argv)
         if (opt_verbosity >= 1) reportf("Parsing MaxSAT file...\n");
         parse_WCNF_file(opt_input, *pb_solver);
         if (opt_maxsat_msu) {
+            if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
             pb_solver->maxsat_solve(convert(opt_command));
         } else {
             for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--) {
@@ -398,12 +399,14 @@ int main(int argc, char** argv)
             }
             pb_solver->soft_cls.clear();
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
+            if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
             pb_solver->solve(convert(opt_command));
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
         if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
+        if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
         pb_solver->solve(convert(opt_command));
     }
 
@@ -437,34 +440,4 @@ int main(int argc, char** argv)
         outputResult(*pb_solver, false);
         exit(0);
   }
-
-}
-
-
-
-//=================================================================================================
-#include "Hardware.h"
-#include "Debug.h"
-
-#define N 10
-
-void test(void)
-{
-    Formula f = var(0), g = var(N-1);
-    for (int i = 1; i < N; i++)
-        f = Bin_new(op_Equiv, f, var(i)),
-        g = Bin_new(op_Equiv, g, var(N-i-1));
-
-    dump(f); dump(g);
-
-    printf("f= %d\n", index(f));
-    printf("g= %d\n", index(g));
-
-    SimpSolver      S;
-    vec<Formula>    fs;
-    fs.push(f ^ g);
-    clausify(S, fs);
-
-    S.verbosity = 1;
-    printf(S.solve() ? "SAT\n" : "UNSAT\n");
 }

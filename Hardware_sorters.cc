@@ -56,7 +56,8 @@ static void directCardClauses(const vec<Formula>& invars, unsigned start,
 
 void encodeBySorter(vec<Formula>& vars, int max_sel, int ineq)
 {
-    int k = opt_shared_fmls || max_sel < 0 || max_sel >= vars.size() ? vars.size() : max_sel;
+    int k = opt_shared_fmls && !(opt_maxsat && (opt_minimization != 1 || max_sel * 1000 < vars.size())) || 
+                  max_sel < 0 || max_sel >= vars.size() ? vars.size() : max_sel;
 
     oddEvenSelect(vars, k, ineq);
 }

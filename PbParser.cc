@@ -413,7 +413,7 @@ static bool parse_WCNF(B& in, S& solver, bool abort_on_error)
 
 }
 
-void parse_WCNF_file(cchar* filename, PbSolver& solver, bool abort_on_error) {
+void parse_WCNF_file(cchar* filename, MsSolver& solver, bool abort_on_error) {
     FileBuffer buf(filename);
     parse_WCNF(buf, solver, abort_on_error); }
 

@@ -23,6 +23,7 @@
 #include <signal.h>
 #include "minisat/utils/System.h"
 #include "Sort.h"
+#include "MsSolver.h"
 #include "Debug.h"
 #include <limits>
 
@@ -54,7 +55,7 @@ static int bin_search(const vec<T>& seq, const T& elem)
     return (fst < seq.size() && seq[fst] == elem ? fst : -1);
 }
         
-static PbSolver *pb_solver;
+static MsSolver *pb_solver;
 static
 void SIGINT_interrupt(int /*signum*/) { pb_solver->sat_solver.interrupt(); pb_solver->asynch_interrupt=true; }
 
@@ -237,7 +238,7 @@ static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs
     return max_assump_Cs;
 }
 
-void PbSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
+void MsSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
 {
     int cnt_unit = 0, cnt_assump = 0, sz = 0;
     Int Ibound = UB_goalvalue - LB_goalvalue, WMAX = Int(std::numeric_limits<weight_t>::max());
@@ -261,7 +262,7 @@ void PbSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs
     if (cnt_assump > 0) clear_assumptions(assump_ps, assump_Cs);
 }
 
-int PbSolver::optimize_last_constraint(vec<Linear*>& constrs)
+int MsSolver::optimize_last_constraint(vec<Linear*>& constrs)
 {
     if (constrs.size() == 0) return 0;
     Minisat::vec<Lit> assump;
@@ -277,10 +278,11 @@ int PbSolver::optimize_last_constraint(vec<Linear*>& constrs)
             constrs.shrink(constrs.size() - 1);
         }
         diff++;
-        while (constrs[0]->lo > 1) {
+        while (constrs[0]->lo > 1 || constrs[0]->hi < constrs[0]->size - 1) {
             Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
             sat_solver.setFrozen(var(newp),true);
-            --constrs[0]->lo; constrs[0]->lit = newp;
+            if (constrs[0]->lo > 1) --constrs[0]->lo; else ++constrs[0]->hi;
+            constrs[0]->lit = newp;
             convertPbs(false);
             sat_solver.addClause(~assump[0], newp);
             assump[0] = newp;
@@ -295,7 +297,7 @@ int PbSolver::optimize_last_constraint(vec<Linear*>& constrs)
 
 static inline int log2(int n) { int i=0; while (n>>=1) i++; return i; }
 
-void PbSolver::maxsat_solve(solve_Command cmd)
+void MsSolver::maxsat_solve(solve_Command cmd)
 {
     if (!okay()) {
         if (opt_verbosity >= 1) sat_solver.printVarsCls();
@@ -353,7 +355,7 @@ void PbSolver::maxsat_solve(solve_Command cmd)
     vec<bool> multi_level_opt;
     bool opt_delay_init_constraints = false, 
          opt_core_minimization = (nClauses() > 0 || soft_cls.size() < 100000);
-    std::priority_queue<Pair<Int, Lit> > delayed_assump;
+    IntLitQueue delayed_assump;
     Int delayed_assump_sum = 0;
 
     Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
@@ -429,7 +431,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
             if (multi_level_opt.last()) ml_opt++;
         }
         opt_stratification(sorted_assump_Cs, sum_sorted_soft_cls);
-        if (ml_opt >= 2 || !opt_to_bin_search && ml_opt >= 1) opt_lexicographic = true;
+        //if (ml_opt >= 2 || !opt_to_bin_search && ml_opt >= 1) 
+            opt_lexicographic = true;
         if (opt_verbosity >= 1 && ml_opt > 0) 
             reportf("Boolean lexicographic optimization can be done in %d point(s).%s\n", 
                     ml_opt, (opt_lexicographic ? "" : " Try -lex-opt option."));
@@ -606,14 +609,16 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                     if (opt_minimization == 1 && p > max_assump) { // && assump_Cs[i] == -min_removed) {
                         int k = assump_map.at(toInt(p));
                         if (k >= 0 && k < saved_constrs.size() &&  saved_constrs[k] != NULL && saved_constrs[k]->lit == p) {
-                            if (saved_constrs[k]->lo > 1) {
+                            if (saved_constrs[k]->lo != Int_MIN && saved_constrs[k]->lo > 1 || 
+                                    saved_constrs[k]->hi != Int_MAX && saved_constrs[k]->hi < saved_constrs[k]->size - 1) {
                                 Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
                                 sat_solver.setFrozen(var(newp),true);
-                                --saved_constrs[k]->lo; saved_constrs[k]->lit = newp;
+                                if (saved_constrs[k]->lo != Int_MIN) --saved_constrs[k]->lo; else ++saved_constrs[k]->hi;
+                                saved_constrs[k]->lit = newp;
                                 assump_ps.push(newp); assump_Cs.push(saved_constrs_Cs[k]);
                                 constrs.push(saved_constrs[k]);
                                 sat_solver.addClause(~p, newp);
-                                if (saved_constrs[k]->lo > 1) assump_map.set(toInt(newp), k);
+                                if (saved_constrs[k]->lo > 1 || saved_constrs[k]->hi < saved_constrs[k]->size - 1) assump_map.set(toInt(newp), k);
                             } else { saved_constrs[k]->~Linear(); saved_constrs[k] = NULL; }
                             assump_map.set(toInt(p), -1);
                         }
@@ -671,7 +676,8 @@ void PbSolver::maxsat_solve(solve_Command cmd)
                 int j = 0;
                 for (int i = 0; i < saved_constrs.size(); i++)
                     if (saved_constrs[i] != NULL) {
-                        if (saved_constrs[i]->lo == 1 && saved_constrs[i]->hi == Int_MAX) {
+                        if (saved_constrs[i]->lo == 1 && saved_constrs[i]->hi == Int_MAX || 
+                                saved_constrs[i]->hi == saved_constrs[i]->size - 1 && saved_constrs[i]->lo == Int_MIN ) {
                             saved_constrs[i]->~Linear();
                             saved_constrs[i] = NULL;
                         } else {
@@ -786,12 +792,10 @@ void set_difference(vec<Lit>& set1, const vec<Lit>& set2)
     if (j < set1.size()) set1.shrink(set1.size() - j);
 }
 
-//DefineHash(Lit, return (uint)toInt(key); )
-
 struct mapLT { Map<Lit, vec<Lit>* >&c; bool operator()(Lit p, Lit q) { return c.at(p)->size() < c.at(q)->size(); }};
 
-void PbSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
-                                              std::priority_queue<Pair<Int, Lit> >& delayed_assump, Int& delayed_assump_sum)
+void MsSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
+                                              IntLitQueue& delayed_assump, Int& delayed_assump_sum)
 {
     Map<Lit, vec<Lit>* > conns;
     vec<Lit> conns_lit;
@@ -850,7 +854,7 @@ void PbSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assum
             if ((new_sz = conns.at(lits[i])->size()) < sz) minl = lits[i], sz = new_sz;
         am1.push(minl);
         vec<Lit>& dep_minl = *conns.ref(minl);
-        sort(dep_minl, cmp); //  cmp(Lit p, Lit q) { return conns.at(p)->size() < conns.at(q)->size(); });
+        sort(dep_minl, cmp);
         for (int sz = dep_minl.size(), i = 0; i < sz; i++) {
             Lit l = dep_minl[i];
             if (bin_search(lits, l) >= 0) {

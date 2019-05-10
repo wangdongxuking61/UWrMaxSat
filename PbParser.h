@@ -20,7 +20,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef PbParser_h
 #define PbParser_h
 
-#include "PbSolver.h"
+#include "MsSolver.h"
 
 
 //=================================================================================================
@@ -28,7 +28,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 extern bool opt_maxsat;
 
 void parse_PB_file(cchar* filename, PbSolver& solver, bool old_format = false, bool abort_on_error = true);
-void parse_WCNF_file(cchar* filename, PbSolver& solver, bool abort_on_error = true);
+void parse_WCNF_file(cchar* filename, MsSolver& solver, bool abort_on_error = true);
 
 //=================================================================================================
 #endif

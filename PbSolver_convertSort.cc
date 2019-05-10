@@ -198,6 +198,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
         buildSorter(ps, Cs, sorted, max_sel, ineq);
         // Add carry bits:
         encodeByMerger(sorted, carry, out_digits,  max_sel, ineq);
+        if (FEnv::topSize() > max_cost) throw Exception_TooBig();
     }else{
         vec<Formula>    ps_rem;
         vec<int>        Cs_rem;
@@ -306,7 +307,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static vec<Int>        Cs;
     static Int lo = Int_MIN, hi = Int_MAX;
     static int lastCost = 0;
-    static bool negate = false;
+    static bool negate = true; //false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
     bool lastBaseOK = false; //sizesDiff >= 0;    
@@ -333,7 +334,8 @@ Formula buildConstraint(const Linear& c, int max_cost)
         else lastEncodingOK = false;
     }
     if (j < c.size) lastEncodingOK = false;
-    //negate = c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK;
+    //negate = (c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK) 
+    //             && opt_maxsat && opt_minimization == 1 && c.size > 1000;
     if (negate) {
         lo = c.hi == Int_MAX ? Int_MIN : sum - c.hi;
         hi = c.lo == Int_MIN ? Int_MAX : sum - c.lo;

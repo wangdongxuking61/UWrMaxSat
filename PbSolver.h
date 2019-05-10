@@ -25,7 +25,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "Map.h"
 #include "StackAlloc.h"
-#include <queue>
 
 #if defined(GLUCOSE3) || defined(GLUCOSE4)
 namespace Minisat = Glucose;
@@ -110,11 +109,7 @@ protected:
 public:
     vec<Linear*>        constrs;        // Vector with all constraints.
     Linear*             goal;           // Non-normalized goal function (used in optimization). NULL means no goal function specified. NOTE! We are always minimizing.
-    Int                 LB_goalvalue, UB_goalvalue, harden_goalval; // Lower and upper bounds on the goal value; harden goalval in the MaxSAT preprocessing 
-    vec<Pair<weight_t, Minisat::vec<Lit>* > > soft_cls; // Relaxed non-unit soft clauses with weights; a relaxing var is the last one in a vector. 
-    int                 top_for_strat, top_for_hard; // Top indices to soft_cls for stratification and hardening operations.
-    Map<Lit, Int>       harden_lits;    // The weights of literals included into "At most 1" clauses (MaxSAT preprocessing of soft clauese).
-    vec<Pair<Lit,Int> > am1_rels;       // The weights of relaxing vars in "At most 1" clauses
+    Int                 LB_goalvalue, UB_goalvalue;  // Lower and upper bounds on the goal value
 
 protected:
     vec<int>            n_occurs;       // Lit -> int: Number of occurrences.
@@ -147,7 +142,6 @@ public:
                 : goal(NULL)
                 , LB_goalvalue(Int_MIN)
                 , UB_goalvalue(Int_MAX)
-                , harden_goalval(0)
                 , propQ_head(0)
                 //, stats(sat_solver.stats_ref())
                 , declared_n_vars(-1)
@@ -189,10 +183,6 @@ public:
     void    allocConstrs   (int n_vars, int n_constrs);
     void    addGoal        (const vec<Lit>& ps, const vec<Int>& Cs);
     bool    addConstr      (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
-    void    storeSoftClause(const vec<Lit>& ps, weight_t weight) {
-                Minisat::vec<Lit> *ps_copy = new Minisat::vec<Lit>; 
-                for (int i = 0; i < ps.size(); i++) ps_copy->push(ps[i]); 
-                soft_cls.push(Pair_new(weight, ps_copy)); }
 
     // Solve:
     //
@@ -200,11 +190,6 @@ public:
 
     enum solve_Command { sc_Minimize, sc_FirstSolution, sc_AllSolutions };
     void    solve(solve_Command cmd = sc_Minimize);        // Returns best/first solution found or Int_MAX if UNSAT.
-    void    harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs);
-    int     optimize_last_constraint(vec<Linear*>& constrs);
-    void    maxsat_solve(solve_Command cmd = sc_Minimize); 
-    void    preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
-                                           std::priority_queue<Pair<Int, Lit> >& delayed_assump, Int& delayed_assump_sum);
 };
 
 

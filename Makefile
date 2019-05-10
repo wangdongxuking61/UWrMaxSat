@@ -14,13 +14,13 @@ all:	r lr lsh
 # Directory to store object files, libraries, executables, and dependencies:
 BUILD_DIR      ?= build
 
-# Include debug-symbols in release builds
-MINISATP_RELSYM ?= -g
+# Do not include debug-symbols in release builds
+MINISATP_RELSYM ?= 
 
 # Sets of compile flags for different build types
-MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
-MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing
-MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing
+MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS 
+MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D COMINISATPS 
+MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS 
 MINISATP_FPIC   ?= -fpic
 
 # GNU Standard Install Variables
@@ -32,8 +32,8 @@ datarootdir ?= $(prefix)/share
 mandir      ?= $(datarootdir)/man
 
 # Dependencies
-MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat
-MINISAT_LIB    ?=-L$(libdir) -lminisat
+MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat -I../cominisatps
+MINISAT_LIB    ?=-L$(libdir) -L../cominisatps/simp -l_release
 
 ## Write Configuration  ###########################################################################
 
@@ -55,7 +55,7 @@ config:
 INSTALL ?= install
 
 # Target file names
-MINISATP      = minisatp#  Name of MiniSat+ main executable.
+MINISATP      = uwr-minisatp#  Name of MiniSat+ main executable.
 MINISATP_SLIB = libminisatp.a#  Name of MiniSat+ static library.
 MINISATP_DLIB = libminisatp.so# Name of MiniSat+ shared library.
 
