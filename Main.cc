@@ -1,5 +1,8 @@
 /*****************************************************************************************[Main.cc]
-Copyright (c) 2005-2010, Niklas Een, Niklas Sorensson
+
+UWrMaxSat:   Copyright (c) 2019, Marek Piotrów, based on:
+kp-minisatp: Copyright (c) 2017-2018, Michał Karpiński and Marek Piotrów, based on:
+Minisat+:    Copyright (c) 2005-2010, Niklas Een, Niklas Sorensson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -80,12 +83,12 @@ unsigned long long int srtOptEncodings = 0, addOptEncodings = 0, bddOptEncodings
 
 cchar* doc =
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
-    "UWr-MiniSat+ 1.0 -- University of Wrocław MaxSAT solver by Marek Piotrów (2019)\n" 
+    "UWrMaxSat 1.0 -- University of Wrocław MaxSAT solver by Marek Piotrów (2019)\n" 
     "and PB solver by Marek Piotrów and Michał Karpiński (2018) -- an extension of\n"
     "MiniSat+ 1.1, based on MiniSat 2.2.0  -- (C) Niklas Een, Niklas Sorensson (2012)\n"
     "with COMiniSatPS by Chanseok Oh (2016) as the SAT solver\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
-    "USAGE: minisatp <input-file> [<result-file>] [-<option> ...]\n"
+    "USAGE: uwrmaxsat <input-file> [<result-file>] [-<option> ...]\n"
     "\n"
     "Solver options:\n"
     "  -ca -adders   Convert PB-constrs to clauses through adders.\n"
@@ -277,7 +280,6 @@ void reportf(const char* format, ...)
 
 MsSolver*   pb_solver = NULL;   // Made global so that the SIGTERM handler can output best solution found.
 
-
 void outputResult(const PbSolver& S, bool optimum = true)
 {
     if (!opt_satlive) return;
@@ -299,6 +301,38 @@ void outputResult(const PbSolver& S, bool optimum = true)
     fflush(stdout);
 }
 
+static void handlerOutputResult(const PbSolver& S, bool optimum = true)
+{     // Signal handler save version of the function outputResult
+#define BUF_SIZE 50000
+    static char buf[BUF_SIZE];
+    static int lst = 0;
+    if (!opt_satlive) return;
+    if (opt_model_out && S.best_goalvalue != Int_MAX){
+        buf[0] = '\n'; buf[1] = 'v'; lst += 2;
+        for (int i = 0; i < S.best_model.size(); i++)
+            if (S.index2name[i][0] != '#') {
+                int sz = strlen(S.index2name[i]);
+                if (lst + sz + 2 >= BUF_SIZE) { buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; }
+                buf[lst++] = ' ';
+                if (!S.best_model[i]) buf[lst++] = '-';
+                strcpy(buf+lst,S.index2name[i]); lst += sz;
+            }
+        buf[lst++] = '\n';
+        if (lst + 20 >= BUF_SIZE) { lst = write(1, buf, lst); lst = 0; }
+    }
+    const char *out;
+    if (optimum){
+        if (S.best_goalvalue == Int_MAX) out = "s UNSATISFIABLE\n";
+        else                             out = "s OPTIMUM FOUND\n";
+    }else{
+        if (S.best_goalvalue == Int_MAX) out = "s UNKNOWN\n";
+        else                             out = "s SATISFIABLE\n";
+    }
+    strcpy(buf + lst, out); lst += strlen(out);
+    lst = write(1, buf, lst); lst = 0;
+#undef BUF_SIZE
+}
+
 
 static void SIGINT_handler(int /*signum*/) {
     reportf("\n");
@@ -309,16 +343,16 @@ static void SIGINT_handler(int /*signum*/) {
 
 
 static void SIGTERM_handler(int signum) {
-    reportf("\n");
-    reportf("*** TERMINATED by signal %d ***\n", signum);
     if (opt_verbosity >= 1) {
+        reportf("\n");
+        reportf("*** TERMINATED by signal %d ***\n", signum);
         reportf("_______________________________________________________________________________\n\n");
         pb_solver->printStats();
         reportf("_______________________________________________________________________________\n");
     }
-    outputResult(*pb_solver, false);
+    handlerOutputResult(*pb_solver, false);
     //SatELite::deleteTmpFiles();
-    fflush(stdout);
+    //fflush(stdout);
     _exit(0);
 }
 

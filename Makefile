@@ -55,7 +55,7 @@ config:
 INSTALL ?= install
 
 # Target file names
-MINISATP      = uwr-minisatp#  Name of MiniSat+ main executable.
+MINISATP      = uwrmaxsat#  Name of MiniSat+ main executable.
 MINISATP_SLIB = libminisatp.a#  Name of MiniSat+ static library.
 MINISATP_DLIB = libminisatp.so# Name of MiniSat+ shared library.
 

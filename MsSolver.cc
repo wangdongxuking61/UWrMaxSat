@@ -241,9 +241,9 @@ static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs
 void MsSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
 {
     int cnt_unit = 0, cnt_assump = 0, sz = 0;
-    Int Ibound = UB_goalvalue - LB_goalvalue, WMAX = Int(std::numeric_limits<weight_t>::max());
-    weight_t       wbound = (Ibound > WMAX ? std::numeric_limits<weight_t>::max() : tolong(Ibound));
-    weight_t ub_goalvalue = (UB_goalvalue > WMAX ? std::numeric_limits<weight_t>::max() : tolong(UB_goalvalue));
+    Int Ibound = UB_goalvalue - LB_goalvalue, WMAX = Int(WEIGHT_MAX);
+    weight_t       wbound = (Ibound >= WMAX ? WEIGHT_MAX : tolong(Ibound));
+    weight_t ub_goalvalue = (UB_goalvalue >= WMAX ? WEIGHT_MAX : tolong(UB_goalvalue));
     for (int i = top_for_hard - 1; i >= 0 && soft_cls[i].fst > wbound; i--) { // hardening soft clauses with weights > the current goal interval length 
         if (soft_cls[i].fst > ub_goalvalue) sz++;
         Lit p = soft_cls[i].snd->last(); if (soft_cls[i].snd->size() > 1) p = ~p;

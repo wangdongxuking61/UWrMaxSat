@@ -52,7 +52,14 @@ using Minisat::var_Undef;
 #define VAR_UPOL true
 #define LBOOL
 #endif
+
+#ifdef BIG_WEIGHTS
+using weight_t = Int; 
+#define WEIGHT_MAX Int_MAX
+#else
 using weight_t = int64_t;
+#define WEIGHT_MAX std::numeric_limits<weight_t>::max()
+#endif
 
 DefineHash(Lit, return (uint)toInt(key); )
 
