@@ -48,7 +48,7 @@ bool PbSolver::convertPbs(bool first_call)
 //printf("\n");
 
         if (opt_verbosity >= 1) 
-            if (first_call) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
+            if (first_call && !opt_maxsat) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
             else if (i == 0 && constrs.size() == 1 && opt_minimization != 1 && !opt_maxsat) /**/ reportf("---[goal]---> ");
     
         try { // M. Piotrow 11.10.2017

@@ -303,7 +303,7 @@ void outputResult(const PbSolver& S, bool optimum = true)
 
 static void handlerOutputResult(const PbSolver& S, bool optimum = true)
 {     // Signal handler save version of the function outputResult
-#define BUF_SIZE 50000
+    constexpr int BUF_SIZE = 50000;
     static char buf[BUF_SIZE];
     static int lst = 0;
     if (!opt_satlive) return;
@@ -330,7 +330,6 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     }
     strcpy(buf + lst, out); lst += strlen(out);
     lst = write(1, buf, lst); lst = 0;
-#undef BUF_SIZE
 }
 
 
@@ -439,9 +438,24 @@ int main(int argc, char** argv)
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
-        if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
-        if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
-        pb_solver->solve(convert(opt_command));
+        if (!opt_maxsat_msu) {
+            if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
+            if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
+            pb_solver->solve(convert(opt_command));
+        } else {
+            if (pb_solver->goal != NULL) {
+                for (int i = 0; i < pb_solver->goal->size; i++) {
+                    Minisat::vec<Lit> *ps_copy = new Minisat::vec<Lit>;
+                    ps_copy->push(~(*pb_solver->goal)[i]);
+                    pb_solver->soft_cls.push(Pair_new(tolong((*pb_solver->goal)(i)), ps_copy));
+                }
+                delete pb_solver->goal; pb_solver->goal = NULL;
+            }
+            opt_maxsat = opt_maxsat_msu = true;
+            if (opt_minimization < 0) opt_minimization = 1; // bin (sat/unsat based) algorithm
+            if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
+            pb_solver->maxsat_solve(convert(opt_command));
+        }
     }
 
     if (pb_solver->goal == NULL && pb_solver->soft_cls.size() == 0 && pb_solver->best_goalvalue != Int_MAX)

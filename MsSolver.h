@@ -75,9 +75,11 @@ class MsSolver : public PbSolver {
   public:
     MsSolver(bool use_preprocessing = false) : 
           PbSolver(use_preprocessing)
-        , harden_goalval(0) {}
+        , harden_goalval(0)
+        , fixed_goalval(0)  {}
 
-    Int                 harden_goalval;  //  Harden goalval used in the MaxSAT preprocessing 
+    Int                 harden_goalval,  //  Harden goalval used in the MaxSAT preprocessing 
+                        fixed_goalval;   // The sum of weights of soft clauses that must be false
     vec<Pair<weight_t, Minisat::vec<Lit>* > > soft_cls; // Relaxed non-unit soft clauses with weights; a relaxing var is the last one in a vector. 
     int                 top_for_strat, top_for_hard; // Top indices to soft_cls for stratification and hardening operations.
     Map<Lit, Int>       harden_lits;    // The weights of literals included into "At most 1" clauses (MaxSAT preprocessing of soft clauese).

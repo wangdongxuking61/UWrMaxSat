@@ -29,6 +29,8 @@
 
 template<typename int_type>
 static int_type gcd(int_type small, int_type big) {
+    if (small < 0) small = -small;
+    if (big < 0) big = -big;
     return (small == 0) ? big: gcd(big % small, small); }
 
 template<typename T>
@@ -243,7 +245,7 @@ void MsSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs
     int cnt_unit = 0, cnt_assump = 0, sz = 0;
     Int Ibound = UB_goalvalue - LB_goalvalue, WMAX = Int(WEIGHT_MAX);
     weight_t       wbound = (Ibound >= WMAX ? WEIGHT_MAX : tolong(Ibound));
-    weight_t ub_goalvalue = (UB_goalvalue >= WMAX ? WEIGHT_MAX : tolong(UB_goalvalue));
+    weight_t ub_goalvalue = (UB_goalvalue >= WMAX ? WEIGHT_MAX : tolong(UB_goalvalue - fixed_goalval));
     for (int i = top_for_hard - 1; i >= 0 && soft_cls[i].fst > wbound; i--) { // hardening soft clauses with weights > the current goal interval length 
         if (soft_cls[i].fst > ub_goalvalue) sz++;
         Lit p = soft_cls[i].snd->last(); if (soft_cls[i].snd->size() > 1) p = ~p;
@@ -311,6 +313,15 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     // Convert constraints:
     pb_n_vars = nVars();
     pb_n_constrs = nClauses();
+    if (constrs.size() > 0) {
+        if (opt_verbosity >= 1)
+            reportf("Converting %d PB-constraints to clauses...\n", constrs.size());
+        propagate();
+        if (!convertPbs(true)){
+            if (opt_verbosity >= 1) sat_solver.printVarsCls(constrs.size() > 0);
+            assert(!okay()); return;
+        }
+    }
 
     // Freeze goal function variables (for SatELite):
     for (int i = 0; i < soft_cls.size(); i++)
@@ -358,11 +369,14 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     IntLitQueue delayed_assump;
     Int delayed_assump_sum = 0;
 
-    Int LB_goalval = 0, UB_goalval = 0, fixed_goalval = 0;    
+    Int LB_goalval = 0, UB_goalval = 0;    
     sort(&soft_cls[0], soft_cls.size(), LT<Pair<weight_t, Minisat::vec<Lit>*> >());
     int j = 0; Lit pj;
     for (int i = 0; i < soft_cls.size(); ++i) {
         soft_cls[i].fst /= goal_gcd;
+        if (soft_cls[i].fst < 0) { 
+            fixed_goalval += soft_cls[i].fst; soft_cls[i].fst = -soft_cls[i].fst; soft_cls[i].snd->last() = ~soft_cls[i].snd->last(); 
+        }
         Lit p = soft_cls[i].snd->last();
         if (soft_cls[i].snd->size() == 1) p = ~p;
         if (value(p) != l_Undef) {
@@ -637,9 +651,9 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             if ((removed = assump_ps.size() - j) > 0)
                 assump_ps.shrink(removed), assump_Cs.shrink(removed);
             if (min_bound == Int_MAX || min_bound < LB_goalvalue) min_bound = LB_goalvalue + 1;
-            LB_goalvalue = (min_removed == 0 ? next_sum(LB_goalvalue, goal_Cs) : 
+            LB_goalvalue = (min_removed == 0 ? next_sum(LB_goalvalue - fixed_goalval - harden_goalval, goal_Cs) + fixed_goalval + harden_goalval: 
                             min_removed == Int_MAX ? min_bound : LB_goalvalue + min_removed);
-        } else if (opt_minimization == 1) LB_goalvalue = next_sum(LB_goalvalue, goal_Cs); 
+        } else if (opt_minimization == 1) LB_goalvalue = next_sum(LB_goalvalue - fixed_goalval - harden_goalval, goal_Cs) + fixed_goalval + harden_goalval; 
         else LB_goalvalue = try_lessthan;
 
         if (LB_goalvalue == best_goalvalue && opt_minimization != 1) break;
@@ -696,8 +710,8 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (weighted_instance && sat && sat_solver.conflicts > 10000)
             harden_soft_cls(assump_ps, assump_Cs);
         if (opt_minimization >= 1 && opt_verbosity >= 2) {
-            char *t; reportf("Lower bound  = %s, assump. size = %d, stratif. level = %d (cls: %d, wght: %d)\n", t=toString(LB_goalvalue * goal_gcd), 
-                    assump_ps.size(), sorted_assump_Cs.size(), top_for_strat, (sorted_assump_Cs.size() > 0 ? sorted_assump_Cs.last() : 0)); xfree(t); }
+            char *t; reportf("Lower bound  = %s, assump. size = %d, stratif. level = %d (cls: %d, wght: %s)\n", t=toString(LB_goalvalue * goal_gcd), 
+                    assump_ps.size(), sorted_assump_Cs.size(), top_for_strat, toString(sorted_assump_Cs.size() > 0 ? sorted_assump_Cs.last() : 0)); xfree(t); }
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
                 Minisat::cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
@@ -747,6 +761,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                     inequality = (assump_ps.size() == 0 ? lit_Undef : mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true));
                     if (inequality != lit_Undef) assump_ps.push(inequality), assump_Cs.push(try_lessthan);
                     if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, inequality)) break; // unsat
+                    try_lessthan += fixed_goalval + harden_goalval;
                     if (constrs.size() > 0) convertPbs(false);
                 }
             }
