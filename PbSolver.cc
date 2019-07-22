@@ -528,7 +528,12 @@ void PbSolver::solve(solve_Command cmd)
         for (int i = 0; i < goal->size; i++)
             sat_solver.setFrozen(var((*goal)[i]), true);
     }
-
+    if (opt_maxsat) {
+        vec<Pair<weight_t, Minisat::vec<Lit>* > > &soft_cls = ((MsSolver *)this)->soft_cls; 
+        for (int i = soft_cls.size() - 1; i >= 0; i--)
+            for (int j = soft_cls[i].snd->size() - 1; j >= 0; j--)
+                sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
+    }
     // Solver (optimize):
     //sat_solver.setVerbosity(opt_verbosity);
     sat_solver.verbosity = opt_verbosity - 1;
@@ -612,16 +617,26 @@ void PbSolver::solve(solve_Command cmd)
             reportf("\n");
             sat_solver.addClause_(ban);
         }else{
-            best_model.clear();
+            vec<bool> model;
             for (Var x = 0; x < pb_n_vars; x++)
                 assert(sat_solver.model[x] != l_Undef),
-                best_model.push(sat_solver.model[x] == l_True);
-            if (goal == NULL)   // ((fix: moved here Oct 4, 2005))
+                    model.push(sat_solver.model[x] == l_True);
+            if (goal == NULL) {
+                model.moveTo(best_model);
                 break;
+            }
+            Int goalvalue = (opt_maxsat ? evalGoal(((MsSolver *)this)->soft_cls, model) : evalGoal(*goal, sat_solver.model)) / goal_gcd;
+            if (goalvalue < best_goalvalue) {
+                best_goalvalue = goalvalue;
+                model.moveTo(best_model);
+                char* tmp = toString(best_goalvalue * goal_gcd);
+                if (opt_satlive || opt_verbosity == 0)
+                    printf("o %s\n", tmp), fflush(stdout);
+                else reportf("\bFound solution: %s\b\n", tmp);
+                xfree(tmp);
+            } else model.clear();
+            if (best_goalvalue < UB_goalvalue) UB_goalvalue = best_goalvalue;
 
-            best_goalvalue = evalGoal(*goal, sat_solver.model) / goal_gcd;
-            if (opt_satlive || opt_verbosity == 0) { 
-                char *tmp; printf("o %s\n", tmp = toString(best_goalvalue * goal_gcd)); fflush(stdout); xfree(tmp); }
             if (cmd == sc_FirstSolution) break;
 
             if (opt_verbosity >= 1 && !opt_satlive){

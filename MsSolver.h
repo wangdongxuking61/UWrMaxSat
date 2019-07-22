@@ -24,9 +24,11 @@
 
 #include "PbSolver.h"
 
-static inline int left (int i)  { return i * 2; }
-static inline int right(int i)  { return i * 2 + 1; }
-static inline int parent(int i) { return i / 2; }
+Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model);
+
+static inline int hleft (int i)  { return i * 2; }
+static inline int hright(int i)  { return i * 2 + 1; }
+static inline int hparent(int i) { return i / 2; }
 
 class IntLitQueue {
   private:
@@ -46,9 +48,9 @@ class IntLitQueue {
         heap.push();
         int i = heap.size() - 1;
         heap[0] = std::move(p);
-        while (parent(i) != 0 && cmp(0, parent(i))) { // percolate up
-            heap[i] = std::move(heap[parent(i)]);
-            i       = parent(i);
+        while (hparent(i) != 0 && cmp(0, hparent(i))) { // percolate up
+            heap[i] = std::move(heap[hparent(i)]);
+            i       = hparent(i);
         }
         heap[i] = std::move(heap[0]);
     }
@@ -59,8 +61,8 @@ class IntLitQueue {
         if (heap.size() > 1) { // percolate down
             int i = 1;
             heap[0] = std::move(heap[1]);
-            while (left(i) < heap.size()){
-                int child = right(i) < heap.size() && cmp(right(i), left(i)) ? right(i) : left(i);
+            while (hleft(i) < heap.size()){
+                int child = hright(i) < heap.size() && cmp(hright(i), hleft(i)) ? hright(i) : hleft(i);
                 if (!cmp(child, 0)) break;
                 heap[i] = std::move(heap[child]);
                 i       = child;

@@ -426,11 +426,9 @@ int main(int argc, char** argv)
             if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
             pb_solver->maxsat_solve(convert(opt_command));
         } else {
-            for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--) {
-                if (pb_solver->soft_cls[i].snd->size() > 1) pb_solver->sat_solver.addClause(*pb_solver->soft_cls[i].snd);
-                delete pb_solver->soft_cls[i].snd;
-            }
-            pb_solver->soft_cls.clear();
+            for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--)
+                if (pb_solver->soft_cls[i].snd->size() > 1)
+                    pb_solver->sat_solver.addClause(*pb_solver->soft_cls[i].snd);
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
             if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
             pb_solver->solve(convert(opt_command));

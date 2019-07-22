@@ -23,7 +23,6 @@
 #include <signal.h>
 #include "minisat/utils/System.h"
 #include "Sort.h"
-#include "MsSolver.h"
 #include "Debug.h"
 #include <limits>
 
@@ -87,7 +86,6 @@ bool satisfied_soft_cls(Minisat::vec<Lit> *cls, vec<bool>& model)
 }
 
 
-static
 Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model)
 {
     Int sum = 0;
@@ -660,7 +658,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
 
         Int goal_diff = harden_goalval+fixed_goalval;
         if (opt_minimization == 1) {
-            inequality = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
+            inequality = goal_ps.size() > 1 ? mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true) : lit_Undef;
             try_lessthan = goal_diff + 2;
 	} else if (opt_minimization == 0 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
             inequality = (assump_ps.size() == 0 ? lit_Undef : mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true));
@@ -684,6 +682,11 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 LB_goalvalue += Int(diff) * assump_Cs.last();
                 if (constrs.last()->lit != inequality) inequality = assump_ps.last() = constrs.last()->lit;
                 saved_constrs.push(constrs.last()), assump_map.set(toInt(inequality),saved_constrs.size() - 1);
+                saved_constrs_Cs.push(assump_Cs.last());
+            } else if (goal_ps.size() > 1) {
+                saved_constrs.push(new (mem.alloc(sizeof(Linear) + goal_ps.size()*(sizeof(Lit) + sizeof(Int))))
+                        Linear(goal_ps, goal_Cs, Int_MIN, 1, inequality));
+                assump_map.set(toInt(inequality),saved_constrs.size() - 1);
                 saved_constrs_Cs.push(assump_Cs.last());
             }
             if (!opt_delay_init_constraints) {

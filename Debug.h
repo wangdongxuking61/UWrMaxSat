@@ -21,7 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Debug_h
 
 #include "minisat/core/SolverTypes.h"
-#include "PbSolver.h"
+#include "MsSolver.h"
 #include "FEnv.h"
 
 
