@@ -1,13 +1,26 @@
 ================================================================================
 Quick Install
 
-- Install a slightly modified version of COMiniSatPS from 
-  https://github.com/marekpiotrow/cominisatps somewhere. 
-  Follow instructions in COMiniSatPS's README.
+- clone the repository into uwrmaxsat:
+    git clone https://github.com/marekpiotrow/UWrMaxSat uwrmaxsat
+    
+- get COMiniSatPSChandrasekharDRUP.zip from 
+    wget https://baldur.iti.kit.edu/sat-competition-2016/solvers/main/COMiniSatPSChandrasekharDRUP.zip
+- unzip and move:
+    unzip COMiniSatPSChandrasekharDRUP.zip
+    mv 'COMiniSatPS Chandrasekhar DRUP/cominisatps' .
+- apply uwrmaxsat/cominisatps.patch:
+    cd cominisatps
+    patch -p1 <../uwrmaxsat/cominisatps.patch
+- compile the SAT solver library:
+    cd simp
+    MROOT=.. make libr
+    cd .. ; ln -s . minisat ; cd ..
 
-- Configure KP-MiniSat+ using the same "prefix" as for COMiniSatPS. This will
-  set up include-paths etc in the most simple way.
+- build the UWrMaxSat solver (release version, statically linked):
+  cd uwrmaxsat
+  make config
+  make r
 
-- Build with "make" and install with "make install".
-
+- the executable file is: build/release/bin/uwrmaxsat
 
