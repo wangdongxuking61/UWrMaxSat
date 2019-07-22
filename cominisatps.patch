@@ -1,0 +1,279 @@
+diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
+--- cominisatps-SAT2016/core/Solver.cc	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/core/Solver.cc	2019-03-06 11:52:39.158184887 +0100
+@@ -150,6 +150,7 @@
+     trail    .capacity(v+1);
+     setDecisionVar(v, dvar);
+ 
++    assump.push(false);
+     // Additional space needed for stamping.
+     // TODO: allocate exact memory.
+     seen      .push(0);
+@@ -589,6 +590,55 @@
+     trail.push_(p);
+ }
+ 
++//=================================================================================================
++// Propagate and check:
++bool Solver::prop_check(const vec<Lit>& assumps, vec<Lit>& prop, int psaving)
++{
++    prop.clear();
++
++    if (!ok)
++        return false;
++
++    bool    st = true;
++    int  level = decisionLevel();
++    CRef confl = CRef_Undef;
++
++    // dealing with phase saving
++    int psaving_copy = phase_saving;
++    phase_saving = psaving;
++
++    // propagate each assumption at a new decision level
++    for (int i = 0; st && confl == CRef_Undef && i < assumps.size(); ++i) {
++        Lit p = assumps[i];
++
++        if (value(p) == l_False)
++            st = false;
++        else if (value(p) != l_True) {
++            newDecisionLevel ();
++            uncheckedEnqueue(p);
++            confl = propagate();
++        }
++    }
++
++    // copying the result
++    if (decisionLevel() > level) {
++        for (int c = trail_lim[level]; c < trail.size(); ++c)
++            prop.push(trail[c]);
++
++        // if there is a conflict, pushing
++        // the conflicting literal as well
++        if (confl != CRef_Undef)
++            prop.push(ca[confl][0]);
++
++        // backtracking
++        cancelUntil(level);
++    }
++
++    // restoring phase saving
++    phase_saving = psaving_copy;
++
++    return st && confl == CRef_Undef;
++}
+ 
+ /*_________________________________________________________________________________________________
+ |
+@@ -650,12 +700,22 @@
+                 *j++ = w; continue; }
+ 
+             // Look for new watch:
++            int choosenPos = -1;
+             for (int k = 2; k < c.size(); k++)
+                 if (value(c[k]) != l_False){
+-                    c[1] = c[k]; c[k] = false_lit;
+-                    watches[~c[1]].push(w);
+-                    goto NextClause; }
+-
++                    choosenPos = k;
++                    if(decisionLevel()>assumptions.size() || value(c[k])==l_True || !assump[var(c[k])]) 
++                        break; }
++            if(choosenPos!=-1) {
++                c[1] = c[choosenPos]; c[choosenPos] = false_lit;
++                watches[~c[1]].push(w);
++                goto NextClause; }
++             /*   for (int k = 2; k < c.size(); k++)
++                    if (value(c[k]) != l_False){
++                        c[1] = c[k]; c[k] = false_lit;
++                        watches[~c[1]].push(w);
++                        goto NextClause; }
++*/
+             // Did not find watch -- clause is unit under assignment:
+             *j++ = w;
+             if (value(first) == l_False){
+@@ -789,7 +848,8 @@
+         ok = stampAll(true);
+ 
+     checkGarbage();
+-    rebuildOrderHeap();
++    if ((int)dec_vars - nAssigns() < (glucose_restart ? order_heap_glue_r : order_heap_no_r).size() / 2) // M. Piotrow 20.07.2017
++        rebuildOrderHeap();
+ 
+     simpDB_assigns = nAssigns();
+     simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
+@@ -998,7 +1058,7 @@
+                 restart = lbd_queue.full() && (lbd_queue.avg() * K > global_lbd_sum / conflicts_glue);
+                 cached = true;
+             }
+-            if (restart /*|| !withinBudget()*/){
++            if (restart || !withinBudget()){
+                 lbd_queue.clear();
+                 // Reached bound on number of conflicts:
+                 progress_estimate = progressEstimate();
+@@ -1017,7 +1077,7 @@
+                 reduceDB(); }
+ 
+             Lit next = lit_Undef;
+-            /*while (decisionLevel() < assumptions.size()){
++            while (decisionLevel() < assumptions.size()){
+                 // Perform user provided assumption:
+                 Lit p = assumptions[decisionLevel()];
+                 if (value(p) == l_True){
+@@ -1032,7 +1092,7 @@
+                 }
+             }
+ 
+-            if (next == lit_Undef)*/{
++            if (next == lit_Undef){
+                 // New variable decision:
+                 decisions++;
+                 next = pickBranchLit();
+@@ -1101,25 +1161,23 @@
+ 
+     solves++;
+ 
++    for (int i = 0; i <assumptions.size(); i++)
++        assump[var(assumptions[i])] = true;
++
+     max_learnts               = nClauses() * learntsize_factor;
+     learntsize_adjust_confl   = learntsize_adjust_start_confl;
+     learntsize_adjust_cnt     = (int)learntsize_adjust_confl;
+     lbool   status            = l_Undef;
+ 
+-    if (verbosity >= 1){
+-        printf("c ============================[ Search Statistics ]==============================\n");
+-        printf("c | Conflicts |          ORIGINAL         |          LEARNT          | Progress |\n");
+-        printf("c |           |    Vars  Clauses Literals |    Limit  Clauses Lit/Cl |          |\n");
+-        printf("c ===============================================================================\n");
+-    }
++    if (verbosity >= 1)
++        printf("c ======================[ COMiniSatPS search starting  ]========================\n");
+ 
+     add_tmp.clear();
+-
+     glucose_restart = true;
+     int init = 10000;
+-    while (status == l_Undef && init > 0 /*&& withinBudget()*/)
++    while (status == l_Undef && init > 0 && withinBudget())
+        status = search(init);
+-    glucose_restart = false;
++    if (status == l_Undef && withinBudget()) glucose_restart = false;
+ 
+     // Search:
+     int phase_allotment = 100;
+@@ -1127,9 +1185,9 @@
+         int weighted = glucose_restart ? phase_allotment * 2 : phase_allotment;
+         fflush(stdout);
+ 
+-        while (status == l_Undef && weighted > 0 /*&& withinBudget()*/)
++        while (status == l_Undef && weighted > 0 && withinBudget())
+             status = search(weighted);
+-        if (status != l_Undef /*|| !withinBudget()*/)
++        if (status != l_Undef || !withinBudget())
+             break; // Should break here for correctness in incremental SAT solving.
+ 
+         glucose_restart = !glucose_restart;
+@@ -1137,9 +1195,6 @@
+             phase_allotment += phase_allotment / 10;
+     }
+ 
+-    if (verbosity >= 1)
+-        printf("c ===============================================================================\n");
+-
+ #ifdef BIN_DRUP
+     if (drup_file && status == l_False) binDRUP_flush(drup_file);
+ #endif
+diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
+--- cominisatps-SAT2016/core/Solver.h	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/core/Solver.h	2019-03-06 11:48:07.642184857 +0100
+@@ -108,6 +108,7 @@
+     bool    solve        (Lit p, Lit q);            // Search for a model that respects two assumptions.
+     bool    solve        (Lit p, Lit q, Lit r);     // Search for a model that respects three assumptions.
+     bool    okay         () const;                  // FALSE means solver is in a conflicting state
++    bool    prop_check   (const vec<Lit>& assumps, vec<Lit>& prop, int psaving = 0); // compute a list of propagated literals given a set of assumptions
+ 
+     void    toDimacs     (FILE* f, const vec<Lit>& assumps);            // Write CNF to file in DIMACS-format.
+     void    toDimacs     (const char *file, const vec<Lit>& assumps);
+@@ -228,6 +229,7 @@
+     OccLists<Lit, vec<Watcher>, WatcherDeleted>
+                         watches_bin,      // Watches for binary clauses only.
+                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
++    vec<bool>           assump;           // Declares if a variable is an assumption variable or not.
+     vec<lbool>          assigns;          // The current assignments.
+     vec<char>           polarity;         // The preferred polarity of each variable.
+     vec<char>           decision;         // Declares if a variable is eligible for selection in the decision heuristic.
+diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
+--- cominisatps-SAT2016/mtl/template.mk	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/mtl/template.mk	2019-05-16 08:14:06.794323553 +0200
+@@ -44,7 +44,7 @@
+ %.o:			CFLAGS +=$(COPTIMIZE) -g -D DEBUG
+ %.op:			CFLAGS +=$(COPTIMIZE) -pg -g -D NDEBUG
+ %.od:			CFLAGS +=-O0 -g -D DEBUG
+-%.or:			CFLAGS +=$(COPTIMIZE) -g -D NDEBUG
++%.or:			CFLAGS +=$(COPTIMIZE)  -D NDEBUG
+ 
+ ## Link options
+ $(EXEC):		LFLAGS += -g
+diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
+--- cominisatps-SAT2016/simp/SimpSolver.cc	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/simp/SimpSolver.cc	2019-04-04 14:34:05.731478845 +0200
+@@ -636,6 +636,7 @@
+     int iter = 0;
+     int n_cls, n_cls_init, n_vars;
+ 
++    printf("c Using COMiniSatPS SAT solver by Chanseok Oh (2016)\n");
+     if (nVars() == 0) goto cleanup; // User disabling preprocessing.
+ 
+     // Get an initial number of clauses (more accurately).
+@@ -648,10 +649,10 @@
+     n_cls  = nClauses();
+     n_vars = nFreeVars();
+ 
+-    printf("c Reduced to %d vars, %d cls (grow=%d)\n", n_vars, n_cls, grow);
++    if (verbosity >= 1) printf("c COMiniSatPS: Reduced to %d vars, %d cls (grow=%d)\n", n_vars, n_cls, grow);
+ 
+     if ((double)n_cls / n_vars >= 10 || n_vars < 10000){
+-        printf("c No iterative elimination performed. (vars=%d, c/v ratio=%.1f)\n", n_vars, (double)n_cls / n_vars);
++        if (verbosity >= 1) printf("c COMiniSatPS: No iterative elimination performed. (vars=%d, c/v ratio=%.1f)\n", n_vars, (double)n_cls / n_vars);
+         goto cleanup; }
+ 
+     grow = grow ? grow * 2 : 8;
+@@ -678,12 +679,12 @@
+         double cl_inc_rate  = (double)n_cls_now   / n_cls_last;
+         double var_dec_rate = (double)n_vars_last / n_vars_now;
+ 
+-        printf("c Reduced to %d vars, %d cls (grow=%d)\n", n_vars_now, n_cls_now, grow);
+-        printf("c cl_inc_rate=%.3f, var_dec_rate=%.3f\n", cl_inc_rate, var_dec_rate);
++        if (verbosity >= 1) printf("c COMiniSatPS: Reduced to %d vars, %d cls (grow=%d)\n", n_vars_now, n_cls_now, grow);
++        if (verbosity >= 1) printf("c COMiniSatPS: cl_inc_rate=%.3f, var_dec_rate=%.3f\n", cl_inc_rate, var_dec_rate);
+ 
+         if (n_cls_now > n_cls_init || cl_inc_rate > var_dec_rate) break;
+     }
+-    printf("c No. effective iterative eliminations: %d\n", iter);
++    if (verbosity >= 1) printf("c COMiniSatPS: No. effective iterative eliminations: %d\n", iter);
+ 
+ cleanup:
+     touched  .clear(true);
+diff -urB cominisatps-SAT2016/utils/Options.h cominisatps/utils/Options.h
+--- cominisatps-SAT2016/utils/Options.h	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/utils/Options.h	2019-01-14 16:42:05.047516560 +0100
+@@ -282,15 +282,15 @@
+         if (range.begin == INT64_MIN)
+             fprintf(stderr, "imin");
+         else
+-            fprintf(stderr, "%4"PRIi64, range.begin);
++            fprintf(stderr, "%4" PRIi64, range.begin);
+ 
+         fprintf(stderr, " .. ");
+         if (range.end == INT64_MAX)
+             fprintf(stderr, "imax");
+         else
+-            fprintf(stderr, "%4"PRIi64, range.end);
++            fprintf(stderr, "%4" PRIi64, range.end);
+ 
+-        fprintf(stderr, "] (default: %"PRIi64")\n", value);
++        fprintf(stderr, "] (default: %" PRIi64")\n", value);
+         if (verbose){
+             fprintf(stderr, "\n        %s\n", description);
+             fprintf(stderr, "\n");
