@@ -118,6 +118,7 @@ public:
     vec<Linear*>        constrs;        // Vector with all constraints.
     Linear*             goal;           // Non-normalized goal function (used in optimization). NULL means no goal function specified. NOTE! We are always minimizing.
     Int                 LB_goalvalue, UB_goalvalue;  // Lower and upper bounds on the goal value
+    vec<Minisat::Lit>   base_assump;    // Used to efficiently encode (using sorters) changing goal bounds in binary search 
 
 protected:
     vec<int>            n_occurs;       // Lit -> int: Number of occurrences.
@@ -156,6 +157,8 @@ public:
                 , declared_n_constrs(-1)
                 , best_goalvalue(Int_MAX)
                 , asynch_interrupt(false)
+                , cpu_interrupt(false)
+                , use_base_assump(false)
                 {
                     // Turn off preprocessing if wanted.
                     if (!use_preprocessing) 
@@ -183,7 +186,7 @@ public:
     vec<cchar*>         index2name;
     vec<bool>           best_model;     // Best model found (size is 'pb_n_vars').
     Int                 best_goalvalue; // Value of goal function for that model (or 'Int_MAX' if no models were found).
-    bool                asynch_interrupt;
+    bool                asynch_interrupt, cpu_interrupt, use_base_assump;
 
     // Problem specification:
     //

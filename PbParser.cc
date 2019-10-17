@@ -206,6 +206,7 @@ void parseGoal(B& in, S& solver, bool old_format)
 
     vec<Lit> ps; vec<Int> Cs; vec<char> tmp;
     skipWhitespace(in);
+    if (*in == '\n') skipLine(in);
     if (*in == ';'){
         ++in;
         skipLine(in);

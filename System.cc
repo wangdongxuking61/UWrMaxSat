@@ -67,9 +67,23 @@ void limitTime(uint32_t max_cpu_time)
         }
     }
 }
+
+void limitTimeOff(void)
+{
+    rlimit rl;
+    getrlimit(RLIMIT_CPU, &rl);
+    rl.rlim_cur = rl.rlim_max;
+    if (setrlimit(RLIMIT_CPU, &rl) == -1)
+        printf("WARNING! Could not set resource limit: CPU-time.\n");
+}
 #else
 void limitTime(uint32_t /*max_cpu_time*/)
 {
+    printf("WARNING! CPU-time limit not supported on this architecture.\n");
+}
+
+void limitTimeOff(void)
+{   
     printf("WARNING! CPU-time limit not supported on this architecture.\n");
 }
 #endif

@@ -50,6 +50,7 @@ extern bool     opt_branch_pbvars;
 extern int      opt_polarity_sug;
 extern bool     opt_shared_fmls;
 extern int      opt_base_max;
+extern int      opt_cpu_lim;
 extern int      opt_minimization;
 extern int      opt_seq_thres;
 extern int      opt_bin_percent;

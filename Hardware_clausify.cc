@@ -363,6 +363,10 @@ void clausify(SimpSolver& s, const vec<Formula>& fs)
 {
     Minisat::vec<Lit>  out;
     clausify(s, fs, out);
-    for (int i = 0; i < out.size(); i++)
-        s.addClause(out[i]);
+    extern PbSolver *pb_solver;
+    if (pb_solver->use_base_assump && out.size() == 1)
+        pb_solver->base_assump.push(out[0]);
+    else
+        for (int i = 0; i < out.size(); i++)
+            s.addClause(out[i]);
 }

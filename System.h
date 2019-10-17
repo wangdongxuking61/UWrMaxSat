@@ -26,4 +26,5 @@ extern void   limitMemory(uint64_t max_mem_mb); // Set a limit on total memory u
 
 extern void   limitTime(uint32_t max_cpu_time); // Set a limit on maximum CPU time. The exact
                                                 // semantics varies depending on architecture.
+extern void limitTimeOff(void);                 // Unset any limit on maximum CPU time.
 #endif

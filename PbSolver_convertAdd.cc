@@ -90,6 +90,6 @@ void linearAddition(const Linear& l, vec<Formula>& out)
         bitAdder(l.hi,_1_,inp);
         f &= lte(sum,inp);
     }
-
-    out.push( l.lit==lit_Undef ? f : ~lit2fml(l.lit) | f );
+    extern PbSolver *pb_solver;
+    out.push( l.lit==lit_Undef || pb_solver->use_base_assump ? f : ~lit2fml(l.lit) | f );
 }

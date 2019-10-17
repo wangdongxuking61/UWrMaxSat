@@ -148,13 +148,16 @@ void optimizeBase(vec<Int>& seq, int& cost_bestfound, vec<int>& base_bestfound)
 
 
 static
-void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq)
+void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq, vec<Formula>& base_assump, int base_assump_from)
 {
   int count0 = 0, count1 = 0;
     out_sorter.clear();
     for (int i = 0; i < ps.size(); i++)
         if (ps[i] == _0_) count0 += Cs[i];
         else if (ps[i] == _1_) count1 += Cs[i];
+        else if (ps[i] == _undef_)
+            for (int j = 0; j < Cs[i]; j++)
+                out_sorter.push(base_assump[base_assump_from++]);
         else
             for (int j = 0; j < Cs[i]; j++)
                 out_sorter.push(ps[i]);
@@ -168,19 +171,20 @@ void buildSorter(vec<Formula>& ps, vec<int>& Cs, vec<Formula>& out_sorter, int m
 }
 
 static
-void buildSorter(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq)
+void buildSorter(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& out_sorter, int max_sel, int ineq, vec<Formula>& base_assump, int base_assump_from)
 {
     vec<int>    Cs_copy;
     for (int i = 0; i < Cs.size(); i++)
         Cs_copy.push(toint(Cs[i]));
-    buildSorter(ps, Cs_copy, out_sorter, max_sel, ineq);
+    buildSorter(ps, Cs_copy, out_sorter, max_sel, ineq, base_assump, base_assump_from);
 }
 
 
 class Exception_TooBig {};
 
 static
-void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<int>& base, int digit_no, vec<Formula>& out_digits, int max_cost, int max_sel, int ineq)
+void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<int>& base, int digit_no, vec<Formula>& out_digits, 
+        int max_cost, int max_sel, int ineq, vec<Formula>& base_assump, int base_assump_from)
 {
     assert(ps.size() == Cs.size());
 
@@ -195,7 +199,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
     if (digit_no == base.size()){
         // Final digit, build sorter for rest:
         vec<Formula> sorted;
-        buildSorter(ps, Cs, sorted, max_sel, ineq);
+        buildSorter(ps, Cs, sorted, max_sel, ineq, base_assump, -1);
         // Add carry bits:
         encodeByMerger(sorted, carry, out_digits,  max_sel, ineq);
         if (FEnv::topSize() > max_cost) throw Exception_TooBig();
@@ -222,7 +226,7 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
 
         // Build sorting network:
         vec<Formula> sorted, result;
-        buildSorter(ps_rem, Cs_rem, sorted, -1, ineq);
+        buildSorter(ps_rem, Cs_rem, sorted, -1, ineq, base_assump, base_assump_from);
         // Add carry bits:
         encodeByMerger(sorted, carry, result, sorted.size()+carry.size(), ineq);
 
@@ -242,7 +246,18 @@ void buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<Formula>& carry, vec<in
             out_digits.last().push(out);
         }*/
 
-        buildConstraint(ps_div, Cs_div, carry, base, digit_no+1, out_digits, max_cost, max_sel, ineq); // <<== change to normal loop
+        buildConstraint(ps_div, Cs_div, carry, base, digit_no+1, out_digits, max_cost, max_sel, ineq, base_assump, base_assump_from+B-1); // <<== change to normal loop
+    }
+}
+
+static
+void set_assumptions(vec<Lit>& assump, Int val, const vec<int>& base, const vec<Formula>& base_assump)
+{
+    //assump.clear();
+    for (int ba_from = 0, i = 0; i < base.size(); val /= base[i], ba_from += base[i]-1, i++) {
+        int rem = toint(val % base[i]);
+        if (rem > 0) assump.push(mkLit(index(base_assump[ba_from + rem - 1]),false));
+        if (rem < base[i] - 1) assump.push(mkLit(index(base_assump[ba_from + rem]),true));
     }
 }
 
@@ -254,8 +269,10 @@ Naming:
 */
 
 static
-Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, Int hi, int max_cost)
+Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, Int hi, int max_cost, 
+        vec<Formula>& base_assump, bool lastEncodingOK)
 {
+  extern PbSolver *pb_solver;
   vec<Formula> carry;
   vec<Formula> last_digit;
   Formula ret = _1_;
@@ -267,13 +284,20 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
   if (lo != Int_MIN && lo > 0) {
     Int rem    = lo % B;
     int lo_val = toint(lo / B);
-
-    if(rem != 0) lo_val++, ps.push(_1_), Cs.push(B-rem);
+    static int old_lo_val = INT_MAX;
+    if (base_assump.size() > 0) {
+        if (rem != 0) lo_val++;
+        if (lo_val > old_lo_val) old_lo_val = lo_val;
+        ps.push(_undef_); Cs.push(B-1);
+        set_assumptions(pb_solver->base_assump,(rem != 0 ? B-rem : 0), base, base_assump);
+    } else if (rem != 0) old_lo_val = ++lo_val, ps.push(_1_), Cs.push(B-rem);
+    else if (lastEncodingOK) old_lo_val = max(old_lo_val, lo_val);
+    else old_lo_val = lo_val;
     //if (hi != INT_MAX) opt_shared_fmls = true;
 
-    buildConstraint(ps, Cs, carry, base, 0, last_digit, max_cost, lo_val, 1);
+    buildConstraint(ps, Cs, carry, base, 0, last_digit, max_cost, old_lo_val, 1, base_assump, 0);
 
-    if (rem != 0) ps.pop(), Cs.pop();
+    if (base_assump.size() > 0 || rem != 0) ps.pop(), Cs.pop();
     
     ret &= last_digit[lo_val-1];
   }
@@ -283,13 +307,21 @@ Formula buildConstraint(vec<Formula>& ps, vec<Int>& Cs, vec<int>& base, Int lo, 
     
     Int rem    = hi % B;
     int hi_val = toint(hi / B);
-
-    if(rem != 0) hi_val++, ps.push(_1_), Cs.push(B-rem);
+    static int old_hi_val = 0;
+    if (!lastEncodingOK) old_hi_val = 0;
+    if (base_assump.size() > 0) {
+        if (rem != 0) hi_val++;
+        if (hi_val > old_hi_val) old_hi_val = hi_val; 
+        ps.push(_undef_); Cs.push(B-1);
+        set_assumptions(pb_solver->base_assump,(rem != 0 ? B-rem : 0), base, base_assump);
+    } else if (rem != 0) old_hi_val = ++hi_val, ps.push(_1_), Cs.push(B-rem);
+    else if (lastEncodingOK) old_hi_val = max(old_hi_val, hi_val);
+    else old_hi_val = hi_val;
 
     carry.clear(); last_digit.clear();
-    buildConstraint(ps, Cs, carry, base, 0, last_digit, max_cost, hi_val, -2);
+    buildConstraint(ps, Cs, carry, base, 0, last_digit, max_cost, old_hi_val, -2, base_assump, 0);
 
-    if (rem != 0) ps.pop(), Cs.pop();
+    if (base_assump.size() > 0 || rem != 0) ps.pop(), Cs.pop();
     //for(int i=0; i<ps.size(); i++) ps[i] = neg(ps[i]);
     
     ret &= ~last_digit[hi_val-1];
@@ -310,7 +342,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     static bool negate = true; //false;
     static Formula lastRet = _undef_;
     int sizesDiff = Cs.size() - c.size;
-    bool lastBaseOK = false; //sizesDiff >= 0;    
+    bool lastBaseOK = sizesDiff >= 0;    
     Int sum = 0, oldlo = lo, oldhi = hi;
 
     for (int i = 0; i < c.size; i++) sum += c(i);
@@ -331,7 +363,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
             if (psi_val == l_True) sumSetToTrue += Cs[i];
             sumAssigned += Cs[i];
         }
-        else lastEncodingOK = false;
+        else if (j < c.size) lastEncodingOK = false;
     }
     if (j < c.size) lastEncodingOK = false;
     //negate = (c.hi == Int_MAX && c(c.size-1) == 1 && c.lo >= sum/2 && !lastEncodingOK || negate && lastEncodingOK) 
@@ -352,21 +384,37 @@ Formula buildConstraint(const Linear& c, int max_cost)
     }
     int      cost;
     static vec<int> base;
+    static vec<Formula> base_assump;
     if (!lastBaseOK || !lastEncodingOK && sizesDiff > 0 && 
                                       (base.size() <= 8 || sizesDiff * 8 > c.size)) {
         optimizeBase(Cs, cost, base);
+        base_assump.clear();
         /**/pf("cost=%d, base.size=%d\n", cost, base.size());
     } else if (sizesDiff == 0 && lastRet == _undef_ && lastCost > max_cost) return _undef_;
-    else {
+    else { // if (!pb_solver->use_base_assump) {
         Int B = 1;
         for (int i = 0; i < base.size(); i++)
             if ((B *= (Int)base[i]) > sum) { base.shrink(base.size() - i); break; }
     }
     FEnv::push();
-
+    if (pb_solver->use_base_assump) {
+        if (base.size() == 0 || lo != Int_MIN && hi != Int_MAX) { base_assump.clear(); pb_solver->use_base_assump = false; }
+        else if (base_assump.size() == 0) {
+            for (int i = 0; i < base.size(); i++) {
+                Lit prev_p = lit_Undef;
+                for (int j = 1; j < base[i]; j++) {
+                    Lit p = mkLit(pb_solver->sat_solver.newVar(true /*l_Undef*/, !opt_branch_pbvars));
+                    pb_solver->sat_solver.setFrozen(var(p), true);
+                    base_assump.push(lit2fml(p));
+                    if (j > 1) pb_solver->sat_solver.addClause(~p,prev_p);
+                    prev_p = p;
+                }
+            }
+        }
+    }
     Formula ret;
     try {
-        ret = buildConstraint(ps, Cs, base, lo, hi, max_cost);
+        ret = buildConstraint(ps, Cs, base, lo, hi, max_cost, base_assump, lastBaseOK);
     }catch (Exception_TooBig){
         lastCost = FEnv::topSize();
         FEnv::pop();
@@ -378,11 +426,11 @@ Formula buildConstraint(const Linear& c, int max_cost)
         if (FEnv::topSize() > 0) {
             reportf("Sorter-cost:%5d     ", FEnv::topSize());
             reportf("Base:"); for (int i = 0; i < base.size(); i++) reportf(" %d", base[i]); reportf("\n");
-        } else if (!opt_maxsat) reportf("\n");
+        } else if (!opt_maxsat && !pb_solver->use_base_assump) reportf("\n");
     }
     lastCost = FEnv::topSize(), lastRet = ret;
     if (opt_maxsat_msu && opt_minimization == 1) FEnv::stack.pop();
     else FEnv::keep();
 
-    return c.lit==lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
+    return c.lit==lit_Undef || pb_solver->use_base_assump ? ret : ~lit2fml(c.lit) | ret ;
 }

@@ -256,6 +256,7 @@ void reportf(const char* format, ...)
     char* text = vnsprintf(format, args);
     va_end(args);
 
+    //if (col0 && text[0] == '\n' && !text[1]) { fflush(stdout); return; }
     for(char* p = text; *p != 0; p++){
         if (col0 && opt_satlive)
             putchar('c'), putchar(' ');
@@ -279,10 +280,11 @@ void reportf(const char* format, ...)
 
 
 MsSolver*   pb_solver = NULL;   // Made global so that the SIGTERM handler can output best solution found.
+static bool resultsPrinted = false;
 
 void outputResult(const PbSolver& S, bool optimum = true)
 {
-    if (!opt_satlive) return;
+    if (!opt_satlive || resultsPrinted) return;
 
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         printf("v");
@@ -299,6 +301,7 @@ void outputResult(const PbSolver& S, bool optimum = true)
         else                             printf("s SATISFIABLE\n");
     }
     fflush(stdout);
+    resultsPrinted = true;
 }
 
 static void handlerOutputResult(const PbSolver& S, bool optimum = true)
@@ -306,7 +309,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     constexpr int BUF_SIZE = 50000;
     static char buf[BUF_SIZE];
     static int lst = 0;
-    if (!opt_satlive) return;
+    if (!opt_satlive || resultsPrinted) return;
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         buf[0] = '\n'; buf[1] = 'v'; lst += 2;
         for (int i = 0; i < S.best_model.size(); i++)
@@ -330,6 +333,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     }
     strcpy(buf + lst, out); lst += strlen(out);
     lst = write(1, buf, lst); lst = 0;
+    resultsPrinted = true;
 }
 
 
@@ -422,23 +426,22 @@ int main(int argc, char** argv)
         if (opt_minimization < 0) opt_minimization = 1; // alt (unsat based) algorithm
         if (opt_verbosity >= 1) reportf("Parsing MaxSAT file...\n");
         parse_WCNF_file(opt_input, *pb_solver);
+        if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
         if (opt_maxsat_msu) {
-            if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
             pb_solver->maxsat_solve(convert(opt_command));
         } else {
             for (int i = pb_solver->soft_cls.size() - 1; i >= 0; i--)
                 if (pb_solver->soft_cls[i].snd->size() > 1)
                     pb_solver->sat_solver.addClause(*pb_solver->soft_cls[i].snd);
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
-            if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
             pb_solver->solve(convert(opt_command));
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
+        if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
         if (!opt_maxsat_msu) {
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
-            if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
             pb_solver->solve(convert(opt_command));
         } else {
             if (pb_solver->goal != NULL) {
@@ -451,7 +454,6 @@ int main(int argc, char** argv)
             }
             opt_maxsat = opt_maxsat_msu = true;
             if (opt_minimization < 0) opt_minimization = 1; // bin (sat/unsat based) algorithm
-            if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
             pb_solver->maxsat_solve(convert(opt_command));
         }
     }

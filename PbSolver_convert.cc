@@ -49,7 +49,7 @@ bool PbSolver::convertPbs(bool first_call)
 
         if (opt_verbosity >= 1) 
             if (first_call && !opt_maxsat) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
-            else if (i == 0 && constrs.size() == 1 && opt_minimization != 1 && !opt_maxsat) /**/ reportf("---[goal]---> ");
+            //else if (i == 0 && constrs.size() == 1 opt_minimization != 1 && !opt_maxsat && !use_base_assump) /**/ reportf("---[goal]---> ");
     
         try { // M. Piotrow 11.10.2017
             if (opt_convert == ct_Sorters)

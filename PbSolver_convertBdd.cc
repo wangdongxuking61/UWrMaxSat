@@ -109,6 +109,6 @@ Formula convertToBdd(const Linear& c, int max_cost)
         ls.push(~c[i]), Cs.push(c(i));
       ret &= convertOneToBdd(ls, Cs, csum - c.hi, max_cost);
     }
-
-    return ret == _undef_ || c.lit == lit_Undef ? ret : ~lit2fml(c.lit) | ret ;
+    extern PbSolver *pb_solver;
+    return ret == _undef_ || c.lit == lit_Undef || pb_solver->use_base_assump ? ret : ~lit2fml(c.lit) | ret ;
 }
