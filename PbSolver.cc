@@ -604,11 +604,15 @@ void PbSolver::solve(solve_Command cmd)
         sat_solver.printVarsCls();
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
-      lbool status = base_assump.size() > 0 && base_assump[0] == assump_lit ? l_True :
-          base_assump.size() > 0 && base_assump[0] == ~assump_lit ? l_False :
+      lbool status = 
+          base_assump.size() == 1 && base_assump[0] == assump_lit ? l_True :
+          base_assump.size() == 1 && base_assump[0] == ~assump_lit ? l_False :
           sat_solver.solveLimited(assump_ps);
       if (use_base_assump) {
-          for (int i = 0; i < base_assump.size(); i++) assump_ps.pop();
+          for (int i = 0; i < base_assump.size(); i++) {                                                                                                              
+              if (status == l_True && var(base_assump[i]) <= pb_n_vars) addUnit(base_assump[i]);                                                                      
+              assump_ps.pop();
+          }
           base_assump.clear();
       }
       if (status  == l_Undef) {

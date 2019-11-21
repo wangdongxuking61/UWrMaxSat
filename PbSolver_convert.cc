@@ -85,6 +85,11 @@ bool PbSolver::convertPbs(bool first_call)
                     else converted_constrs.push(result);
                 }
             } else assert(false);
+            if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1)
+                constrs[i]->~Linear(), constrs[i] = NULL;
+            if (!opt_shared_fmls && FEnv::nodes.size() >= 100000) { 
+                clausify(sat_solver, converted_constrs); converted_constrs.clear();
+            }
             opt_convert = saved_opt_convert;
         } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
 	    FEnv::pop(); i-=1;
@@ -97,15 +102,8 @@ bool PbSolver::convertPbs(bool first_call)
         }
         if (!okay()) return false;
     }
-
-    // NOTE: probably still leaks memory (if there are constraints that are NULL'ed elsewhere)
-    if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1) {
-        for (int i = 0; i < constrs.size(); i++)
-          if (constrs[i] != NULL)
-            constrs[i]->~Linear();
-        constrs.clear();
-        mem.clear();
-    }
+    if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1)
+        constrs.clear(), mem.clear();
 
     try { // M. Piotrow 15.06.2018
         int nvars = sat_solver.nVars(), ncls = sat_solver.nClauses();
@@ -113,7 +111,7 @@ bool PbSolver::convertPbs(bool first_call)
         if (opt_verbosity >=2 && ((nvars -= sat_solver.nVars()) < 0 | (ncls -= sat_solver.nClauses()) < 0)) 
             reportf("New vars/cls: %d/%d\n", -nvars, -ncls);
     } catch (std::bad_alloc& ba) { // M. Piotrow 15.06.2018
-      reportf("Out of memery in converting constraints: %s\n",ba.what());
+      reportf("Out of memery in clausifying constraints: %s\n",ba.what());
       exit(1);
     }
     return okay();

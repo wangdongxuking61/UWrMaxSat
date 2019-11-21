@@ -256,7 +256,7 @@ void reportf(const char* format, ...)
     char* text = vnsprintf(format, args);
     va_end(args);
 
-    //if (col0 && text[0] == '\n' && !text[1]) { fflush(stdout); return; }
+    if (col0 && text[0] == '\n' && !text[1]) { fflush(stdout); return; }
     for(char* p = text; *p != 0; p++){
         if (col0 && opt_satlive)
             putchar('c'), putchar(' ');
@@ -438,8 +438,8 @@ int main(int argc, char** argv)
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
-        if (opt_convert == ct_Undef) opt_convert = ct_Sorters;
         parse_PB_file(opt_input, *pb_solver, opt_old_format);
+        if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
         if (!opt_maxsat_msu) {
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
             pb_solver->solve(convert(opt_command));

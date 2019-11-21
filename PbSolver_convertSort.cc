@@ -391,7 +391,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
         base_assump.clear();
         /**/pf("cost=%d, base.size=%d\n", cost, base.size());
     } else if (sizesDiff == 0 && lastRet == _undef_ && lastCost > max_cost) return _undef_;
-    else { // if (!pb_solver->use_base_assump) {
+    else if (!pb_solver->use_base_assump) {
         Int B = 1;
         for (int i = 0; i < base.size(); i++)
             if ((B *= (Int)base[i]) > sum) { base.shrink(base.size() - i); break; }
