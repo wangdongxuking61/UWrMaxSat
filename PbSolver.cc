@@ -610,7 +610,7 @@ void PbSolver::solve(solve_Command cmd)
           sat_solver.solveLimited(assump_ps);
       if (use_base_assump) {
           for (int i = 0; i < base_assump.size(); i++) {                                                                                                              
-              if (status == l_True && var(base_assump[i]) <= pb_n_vars) addUnit(base_assump[i]);                                                                      
+              if (status == l_True && var(base_assump[i]) < pb_n_vars) addUnit(base_assump[i]);                                                                      
               assump_ps.pop();
           }
           base_assump.clear();

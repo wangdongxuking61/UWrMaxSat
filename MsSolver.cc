@@ -162,7 +162,7 @@ static Int next_sum(Int bound, const vec<Int>& cs)
 
 }
 
-static
+/*static
 Int evalPsCs(vec<Lit>& ps, vec<Int>&Cs, vec<bool>& model)
 {
     Int sum = 0;
@@ -177,7 +177,7 @@ Int evalPsCs(vec<Lit>& ps, vec<Int>&Cs, vec<bool>& model)
     return sum;
 }
 
-/*static
+static
 Int evalPsCs(vec<Lit>& ps, vec<Int>&Cs, Minisat::vec<lbool>& model)
 {
     Int sum = 0;
@@ -474,11 +474,15 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         limitTime(opt_unsat_cpu); */
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
-      lbool status = base_assump.size() > 0 && base_assump[0] == inequality ? l_True :
-          base_assump.size() > 0 && base_assump[0] == ~inequality ? l_False :
+      lbool status = 
+          base_assump.size() == 1 && base_assump[0] == inequality ? l_True :
+          base_assump.size() == 1 && base_assump[0] == ~inequality ? l_False :
           sat_solver.solveLimited(assump_ps);
       if (use_base_assump) {
-          for (int i = 0; i < base_assump.size(); i++) assump_ps.pop();
+          for (int i = 0; i < base_assump.size(); i++) {
+              if (status == l_True && var(base_assump[i]) < pb_n_vars) addUnit(base_assump[i]);                                                                      
+              assump_ps.pop();
+          }
           base_assump.clear();
       }
       if (first_time) { 
