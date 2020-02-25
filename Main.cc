@@ -34,6 +34,8 @@ Read a DIMACS file and apply the SAT-solver to it.
 #include "PbParser.h"
 #include "FEnv.h"
 
+#include "preprocessorinterface.hpp"
+
 //=================================================================================================
 // Command line options:
 
@@ -70,10 +72,13 @@ double   opt_unsat_cpu     = 1200; // in seconds
 bool     opt_lexicographic = false;
 bool     opt_to_bin_search = true;
 bool     opt_maxsat_prepr  = true;
+bool     opt_use_maxpre    = false;
+char     opt_maxpre_str[80]= "[bu]#[buvsrgc]";
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
 
+maxPreprocessor::PreprocessorInterface *maxpre_ptr = NULL;
 
 // -- statistics;
 unsigned long long int srtEncodings = 0, addEncodings = 0, bddEncodings = 0;
@@ -134,6 +139,8 @@ cchar* doc =
     "  -unsat-cpu=   Time to switch UNSAT search strategy to SAT/UNSAT. [def: %g s]\n"
     "  -lex-opt      Do Boolean lexicographic optimizations on soft clauses.\n"
     "  -no-bin       Do not switch from UNSAT to SAT/UNSAT search strategy.\n"
+    "  -maxpre       Use MaxPre - an extended MaxSAT preprocessor by Korhonen.\n"
+    "  -maxpre=      MaxPre technique selection string. [def: \"%s\"]\n"
     "  -no-ms-pre    Do not preprocess soft clauses (detect unit/am1 cores).\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
@@ -168,7 +175,9 @@ void parseOptions(int argc, char** argv)
     for (int i = 1; i < argc; i++){
         char*   arg = argv[i];
         if (arg[0] == '-'){
-            if (oneof(arg,"h,help")) fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, opt_base_max, opt_unsat_cpu), exit(0);
+            if (oneof(arg,"h,help")) 
+                fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, 
+                        opt_base_max, opt_unsat_cpu, opt_maxpre_str), exit(0);
 
             else if (oneof(arg, "ca,adders" )) opt_convert = ct_Adders;
             else if (oneof(arg, "cs,sorters")) opt_convert = ct_Sorters;
@@ -213,6 +222,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "lex-opt"   )) opt_lexicographic = true;
             else if (oneof(arg, "no-bin"    )) opt_to_bin_search = false;
             else if (oneof(arg, "no-ms-pre" )) opt_maxsat_prepr = false;
+            else if (oneof(arg, "maxpre" ))    opt_use_maxpre = true;
 
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;
@@ -225,6 +235,8 @@ void parseOptions(int argc, char** argv)
             }
             else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
+            else if (strncmp(arg, "-maxpre=",   8) == 0) 
+                opt_use_maxpre = true, strncpy(opt_maxpre_str,arg+8,sizeof(opt_maxpre_str));
             else
                 fprintf(stderr, "ERROR! Invalid command line option: %s\n", argv[i]), exit(1);
 
@@ -233,7 +245,8 @@ void parseOptions(int argc, char** argv)
     }
 
     if (args.size() == 0)
-        fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias), exit(0);
+        fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, 
+                        opt_base_max, opt_unsat_cpu, opt_maxpre_str), exit(0);
     if (args.size() >= 1)
         opt_input = args[0];
     if (args.size() == 2)
@@ -288,9 +301,18 @@ void outputResult(const PbSolver& S, bool optimum = true)
 
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         printf("v");
-        for (int i = 0; i < S.best_model.size(); i++)
-            if (S.index2name[i][0] != '#')
-                printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
+        if (opt_use_maxpre) {
+            std::vector<int> trueLiterals, model;
+            for (int i = 0; i < S.best_model.size(); i++)
+                trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
+            model = maxpre_ptr->reconstruct(trueLiterals);
+            for (unsigned i = 0; i < model.size(); i++)
+                printf(" %d", model[i]);
+        } else {
+            for (int i = 0; i < S.best_model.size(); i++)
+                if (S.index2name[i][0] != '#')
+                    printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
+        }
         printf("\n");
     }
     if (optimum){
@@ -312,14 +334,34 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     if (!opt_satlive || resultsPrinted) return;
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         buf[0] = '\n'; buf[1] = 'v'; lst += 2;
-        for (int i = 0; i < S.best_model.size(); i++)
-            if (S.index2name[i][0] != '#') {
-                int sz = strlen(S.index2name[i]);
-                if (lst + sz + 2 >= BUF_SIZE) { buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; }
+        if (opt_use_maxpre) {
+            std::vector<int> trueLiterals, model;
+            for (int i = 0; i < S.best_model.size(); i++)
+                trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
+            model = maxpre_ptr->reconstruct(trueLiterals);
+            for (unsigned i = 0; i < model.size(); i++) {
+                if (lst + 15 >= BUF_SIZE) { 
+                    buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                }
                 buf[lst++] = ' ';
-                if (!S.best_model[i]) buf[lst++] = '-';
-                strcpy(buf+lst,S.index2name[i]); lst += sz;
+                if (model[i] < 0) { buf[lst++] = '-'; model[i] = -model[i]; }
+                char *first = buf + lst;
+                for (int v = model[i]; v > 0; v /= 10) buf[lst++] = '0' + v%10;
+                for (char *last = buf+lst-1; first < last; first++, last--) { 
+                    char c = *first; *first = *last; *last = c; }
             }
+        } else {
+            for (int i = 0; i < S.best_model.size(); i++)
+                if (S.index2name[i][0] != '#') {
+                    int sz = strlen(S.index2name[i]);
+                    if (lst + sz + 2 >= BUF_SIZE) { 
+                        buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                    }
+                    buf[lst++] = ' ';
+                    if (!S.best_model[i]) buf[lst++] = '-';
+                    strcpy(buf+lst,S.index2name[i]); lst += sz;
+                }
+        }
         buf[lst++] = '\n';
         if (lst + 20 >= BUF_SIZE) { lst = write(1, buf, lst); lst = 0; }
     }
@@ -458,7 +500,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (pb_solver->goal == NULL && pb_solver->soft_cls.size() == 0 && pb_solver->best_goalvalue != Int_MAX)
+    if (pb_solver->goal == NULL && pb_solver->soft_cls.size() == 0 && pb_solver->best_goalvalue == Int_MAX)
         opt_command = cmd_FirstSolution;    // (otherwise output will be wrong)
     if (!pb_solver->okay())
         opt_command = cmd_Minimize;         // (HACK: Get "UNSATISFIABLE" as output)

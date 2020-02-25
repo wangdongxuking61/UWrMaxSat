@@ -19,7 +19,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "PbParser.h"
 #include "File.h"
-
+#include "Sort.h"
+#include "preprocessorinterface.hpp"
 
 //=================================================================================================
 // Parser buffers (streams):
@@ -270,6 +271,7 @@ bool parseConstrs(B& in, S& solver, bool old_format)
 template<class B, class S>
 static void parse_p_line(B& in, S& solver, bool& wcnf_format, Int& hard_bound)
 {
+    extern bool opt_use_maxpre;
     int n_vars, n_constrs;
     vec<char> tmp(15,0);
 
@@ -291,10 +293,12 @@ static void parse_p_line(B& in, S& solver, bool& wcnf_format, Int& hard_bound)
     if (*in >= '0' && *in <= '9' || *in == '+') 
         hard_bound = parseInt(in);
 
-    solver.allocConstrs(n_vars, n_constrs);
-    for (int i = 1; i <= n_vars; i++) {
-        sprintf(&tmp[0], "%d", i);
-        solver.getVar(tmp);
+    if (!opt_use_maxpre) {
+        solver.allocConstrs(n_vars, n_constrs);
+        for (int i = 1; i <= n_vars; i++) {
+            sprintf(&tmp[0], "%d", i);
+            solver.getVar(tmp);
+        }
     }
   Abort:
     skipLine(in);
@@ -320,33 +324,73 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
     vec<Lit> ps, gps; vec<Int> gCs; vec<char> tmp;
     int    gvars = 0;
     Int one = 1, weight;
+
+    extern bool opt_use_maxpre;
+    extern char opt_maxpre_str[80];
+    extern maxPreprocessor::PreprocessorInterface *maxpre_ptr;
+    std::vector<std::vector<int> > clauses;
+    std::vector<uint64_t>  weights;
+
+    tmp.clear(); tmp.growTo(15,0);
     while (*in != EOF){
         weight = (wcnf_format ? parseInt(in) : 1);
+        if (opt_use_maxpre) clauses.push_back(std::vector<int>());
         while (1) {
             bool negated = parseLit(in,tmp);
-            if (tmp.size() == 2 && tmp[0] == '0') break; 
-            ps.push(mkLit(solver.getVar(tmp), negated));
+            if (tmp.size() == 2 && tmp[0] == '0') break;
+            if (opt_use_maxpre) clauses.back().push_back(negated ? -atoi(tmp) : atoi(tmp));
+            else ps.push(mkLit(solver.getVar(tmp), negated));
         }
         skipEndOfLine(in);
-        if (ps.size() == 1) {
-            if (weight < hard_bound) {
-                gvars++;
-                if (!opt_maxsat_msu) gps.push(~ps.last()), gCs.push(weight);
-                solver.storeSoftClause(ps, tolong(weight));
-            } else if (!solver.addClause(ps))
-                return false;
+        if (opt_use_maxpre) {
+            weights.push_back(tolong(weight));
+        } else if (weight >= hard_bound) {
+            if (!solver.addClause(ps)) return false;
         } else {
-            if (weight < hard_bound) {
-                gvars++;
-                tmp.clear(); tmp.growTo(15,0);
+            gvars++;
+            if (ps.size() == 1) {
+                if (!opt_maxsat_msu) gps.push(~ps.last()), gCs.push(weight);
+            } else {
                 sprintf(&tmp[0],"#%d",gvars);
                 ps.push(mkLit(solver.getVar(tmp), true)); 
                 if (!opt_maxsat_msu) gps.push(ps.last()), gCs.push(weight);
-                solver.storeSoftClause(ps, tolong(weight));
-            } else if (!solver.addClause(ps))
-                return false;
+            } 
+            solver.storeSoftClause(ps, tolong(weight));
         }
         ps.clear();
+    }
+    if (opt_use_maxpre) {
+        reportf("Using MaxPre - an MaxSAT preprocessor by Tuukka Korhonen (2017) with techniques: %s\n", 
+                opt_maxpre_str);
+        uint64_t topWeight = tolong(hard_bound);
+        maxpre_ptr = new maxPreprocessor::PreprocessorInterface(clauses, weights, topWeight);
+        //maxpre_ptr->setSkipTechnique(100);
+        maxpre_ptr->preprocess(std::string(opt_maxpre_str));
+        if (opt_verbosity > 0) maxpre_ptr->printTimeLog(std::cout);
+        clauses.clear(); weights.clear();
+        std::vector<int> labels;
+        maxpre_ptr->getInstance(clauses, weights, labels);
+        assert(clauses.size() == weights.size());
+        for (unsigned maxvar = 1, i = 0 ; i < clauses.size(); i++) {
+            ps.clear(); 
+            for (unsigned j = 0; j < clauses[i].size(); j++) {
+                unsigned var = abs(clauses[i][j]);
+                for ( ; maxvar <= var; maxvar++) {
+                    sprintf(&tmp[0],"%d",maxvar);
+                    solver.getVar(tmp);
+                }
+                ps.push(mkLit(var - 1, clauses[i][j] < 0));
+            }
+            if (weights[i] == 0) continue;
+            if (weights[i] >= topWeight) {
+                if (!solver.addClause(ps)) return false;
+            } else {
+                if (!opt_maxsat_msu) 
+                    gps.push(ps.size() == 1 ? ~ps.last() : ps.last()), gCs.push((int64_t)weights[i]);
+                solver.storeSoftClause(ps, (int64_t)weights[i]);
+            }
+        }
+        clauses.clear(); weights.clear();
     }
     if (gvars == 0 && !opt_maxsat_msu) {
         tmp.clear(); tmp.growTo(15,0);

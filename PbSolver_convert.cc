@@ -43,9 +43,6 @@ bool PbSolver::convertPbs(bool first_call)
     for (int i = 0; i < constrs.size(); i++) {
         if (constrs[i] == NULL) continue;
         Linear& c   = *constrs[i]; assert(c.lo != Int_MIN || c.hi != Int_MAX);
-//printf("constrs[%d]: size = %d, lo = %s, hi = %s, var = %s%d\n", i, constrs[i]->size, toString(constrs[i]->lo), toString(constrs[i]->hi), sign(constrs[i]->lit) ? "-" : "", var(constrs[i]->lit));
-//for (int j = 0; j < constrs[i]->size; j++) printf(" %s %s%d",toString((*constrs[i])(j)), sign((*constrs[i])[j]) ? "-" : "", var((*constrs[i])[j]));
-//printf("\n");
 
         if (opt_verbosity >= 1) 
             if (first_call && !opt_maxsat) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
