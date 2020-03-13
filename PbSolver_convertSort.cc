@@ -398,7 +398,7 @@ Formula buildConstraint(const Linear& c, int max_cost)
     }
     FEnv::push();
     if (pb_solver->use_base_assump) {
-        if (base.size() == 0 || lo != Int_MIN && hi != Int_MAX) { base_assump.clear(); pb_solver->use_base_assump = false; }
+        if (base.size() == 0 || lo != Int_MIN && hi != Int_MAX) { base_assump.clear(); /*pb_solver->use_base_assump = false;*/ }
         else if (base_assump.size() == 0) {
             for (int i = 0; i < base.size(); i++) {
                 Lit prev_p = lit_Undef;

@@ -265,37 +265,38 @@ void MsSolver::harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs
     if (cnt_assump > 0) clear_assumptions(assump_ps, assump_Cs);
 }
 
-int MsSolver::optimize_last_constraint(vec<Linear*>& constrs)
+void MsSolver::optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>& assump_ps, Minisat::vec<Lit>& new_assump)
 {
-    if (constrs.size() == 0) return 0;
     Minisat::vec<Lit> assump;
-    assump.push(constrs.last()->lit);
-    sat_solver.setConfBudget(1000);
-
+    if (constrs.size() == 0) return ;
     int verb = sat_solver.verbosity; sat_solver.verbosity = 0;
-    int diff = 0;
-    if (sat_solver.solveLimited(assump) == l_False) { 
-        if (constrs.size() > 1) {
-            constrs[0]->~Linear(); constrs[0] = constrs.last();
-            for (int i = 1; i < constrs.size(); i++) constrs[i]->~Linear();
-            constrs.shrink(constrs.size() - 1);
-        }
-        diff++;
-        while (constrs[0]->lo > 1 || constrs[0]->hi < constrs[0]->size - 1) {
-            Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
-            sat_solver.setFrozen(var(newp),true);
-            if (constrs[0]->lo > 1) --constrs[0]->lo; else ++constrs[0]->hi;
-            constrs[0]->lit = newp;
-            convertPbs(false);
-            sat_solver.addClause(~assump[0], newp);
-            assump[0] = newp;
-            if (sat_solver.solveLimited(assump) != l_False) break;
-            diff++;
+    bool found = false;
+
+    sat_solver.setConfBudget(1000);
+    if (sat_solver.solveLimited(assump_ps) == l_False) {
+        for (int i=0; i < sat_solver.conflict.size(); i++)
+            if (assump_ps.last() == ~sat_solver.conflict[i]) { found = true; break;}
+        if (found) {
+            if (constrs.size() > 1) {
+                constrs[0] = constrs.last();
+                constrs.shrink(constrs.size() - 1);
+            }
+            while (found && (constrs[0]->lo > 1 || constrs[0]->hi < constrs[0]->size - 1)) {
+                Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
+                sat_solver.setFrozen(var(newp),true);
+                if (constrs[0]->lo > 1) --constrs[0]->lo; else ++constrs[0]->hi;
+                constrs[0]->lit = newp;
+                convertPbs(false);
+                sat_solver.addClause(~assump_ps.last(), newp);
+                new_assump.push(assump_ps.last()); assump_ps.last() = newp;
+                if (sat_solver.solveLimited(assump_ps) != l_False) break;
+                found = false;
+                for (int i=0; i < sat_solver.conflict.size(); i++)
+                    if (assump_ps.last() == ~sat_solver.conflict[i]) { found = true; break;}
+            }
         }
     }
     sat_solver.budgetOff(); sat_solver.verbosity = verb;
-    if (diff > 0) reportf("AM1 constraint optimized to <= %d\n", diff+1);
-    return diff;
 }
 
 static inline int log2(int n) { int i=0; while (n>>=1) i++; return i; }
@@ -713,8 +714,16 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (constrs.size() > 0 && (opt_minimization != 1 || !opt_delay_init_constraints)) convertPbs(false);
         if (opt_minimization == 1) {
             if (constrs.size() > 0 && constrs.last()->lit == assump_lit) {
-                int diff = 0; //optimize_last_constraint(constrs);
-                LB_goalvalue += Int(diff) * assump_Cs.last();
+                Minisat::vec<Lit> new_assump; 
+                optimize_last_constraint(constrs, assump_ps, new_assump);
+                if (new_assump.size() > 0) {
+                    delayed_assump_sum += Int(new_assump.size()) * assump_Cs.last();
+                    //Minisat::Lit l = assump_ps.last(); assump_ps.pop();
+                    for (int i=0; i < new_assump.size(); i++) 
+                        delayed_assump.push(Pair_new(assump_Cs.last(), new_assump[i]));
+                        //assump_ps.push(new_assump[i]), assump_Cs.push(assump_Cs.last());
+                    //assump_ps.push(l);
+                }
                 if (constrs.last()->lit != assump_lit) assump_lit = assump_ps.last() = constrs.last()->lit;
                 saved_constrs.push(constrs.last()), assump_map.set(toInt(assump_lit),saved_constrs.size() - 1);
                 saved_constrs_Cs.push(assump_Cs.last());
