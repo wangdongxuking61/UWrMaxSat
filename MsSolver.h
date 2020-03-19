@@ -42,6 +42,8 @@ class IntLitQueue {
 
     bool empty() { return heap.size() <= 1; }
 
+    void clear() { heap.shrink(heap.size() - 1); }
+
     const Pair<Int, Lit>& top() { return heap[1]; }
 
     void push(Pair<Int, Lit> p) { 

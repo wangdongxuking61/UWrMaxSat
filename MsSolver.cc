@@ -214,8 +214,6 @@ static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs
                                             Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
 {
     weight_t  max_assump_Cs;
-    //do { max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop(); 
-    //} while (sorted_assump_Cs.size() > 0 && !sum_sorted_soft_cls[sorted_assump_Cs.size()].snd);
     max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop();
     if (sorted_assump_Cs.size() > 0 && sorted_assump_Cs.last() == max_assump_Cs - 1) 
         max_assump_Cs = sorted_assump_Cs.last(), sorted_assump_Cs.pop(); 
@@ -282,12 +280,11 @@ void MsSolver::optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>
                 constrs.shrink(constrs.size() - 1);
             }
             while (found && (constrs[0]->lo > 1 || constrs[0]->hi < constrs[0]->size - 1)) {
-                Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
-                sat_solver.setFrozen(var(newp),true);
                 if (constrs[0]->lo > 1) --constrs[0]->lo; else ++constrs[0]->hi;
-                constrs[0]->lit = newp;
+                constrs[0]->lit = lit_Undef;
                 convertPbs(false);
-                sat_solver.addClause(~assump_ps.last(), newp);
+                Lit newp = constrs[0]->lit;
+                sat_solver.setFrozen(var(newp),true);
                 new_assump.push(assump_ps.last()); assump_ps.last() = newp;
                 if (sat_solver.solveLimited(assump_ps) != l_False) break;
                 found = false;
@@ -447,8 +444,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             if (multi_level_opt.last()) ml_opt++;
         }
         opt_stratification(sorted_assump_Cs, sum_sorted_soft_cls);
-        //if (ml_opt >= 2 || !opt_to_bin_search && ml_opt >= 1) 
-            opt_lexicographic = true;
+        opt_lexicographic = true;
         if (opt_verbosity >= 1 && ml_opt > 0) 
             reportf("Boolean lexicographic optimization can be done in %d point(s).%s\n", 
                     ml_opt, (opt_lexicographic ? "" : " Try -lex-opt option."));
@@ -471,8 +467,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     if (opt_cpu_lim != INT32_MAX) {
         int used_cpu = Minisat::cpuTime();
         first_time=true; limitTime(used_cpu + (opt_cpu_lim - used_cpu)/4);
-    } /*else if (opt_minimization == 1 && opt_to_bin_search && Minisat::cpuTime() < opt_unsat_cpu)
-        limitTime(opt_unsat_cpu); */
+    }
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
       lbool status = 
@@ -490,14 +485,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         first_time = false; sat_solver.clearInterrupt(); 
         if (asynch_interrupt && cpu_interrupt) asynch_interrupt = false;
         cpu_interrupt = false; limitTime(opt_cpu_lim);
-        /*limitTime(opt_minimization == 1 && opt_to_bin_search && Minisat::cpuTime() < opt_unsat_cpu && 
-                opt_unsat_cpu < opt_cpu_lim ? opt_unsat_cpu : opt_cpu_lim);*/ 
-      } else /*if (cpu_interrupt && Minisat::cpuTime() < opt_cpu_lim) {
-          sat_solver.clearInterrupt(); asynch_interrupt = cpu_interrupt = false;
-          if (opt_cpu_lim != INT32_MAX) limitTime(opt_cpu_lim); else limitTimeOff();
-          if (opt_minimization == 1 && opt_to_bin_search) goto switchToBinSearch; 
-      }*/
-      if (status  == l_Undef) {
+      } else if (status  == l_Undef) {
         if (asynch_interrupt) { reportf("*** Interrupted ***\n"); break; }
       } else if (status == l_True) { // SAT returned
         if (opt_minimization == 1 && opt_delay_init_constraints) {
@@ -648,6 +636,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             }
         }
         if (other_conflict && min_removed != Int_MAX && opt_minimization != 1) min_removed = 0;
+        vec<int> modified_saved_constrs;
         if (removed > 0) {
             int j = 0;
             for (int i = 0; i < assump_ps.size(); i++) {
@@ -658,14 +647,10 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                         if (k >= 0 && k < saved_constrs.size() &&  saved_constrs[k] != NULL && saved_constrs[k]->lit == p) {
                             if (saved_constrs[k]->lo != Int_MIN && saved_constrs[k]->lo > 1 || 
                                     saved_constrs[k]->hi != Int_MAX && saved_constrs[k]->hi < saved_constrs[k]->size - 1) {
-                                Lit newp = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
-                                sat_solver.setFrozen(var(newp),true);
                                 if (saved_constrs[k]->lo != Int_MIN) --saved_constrs[k]->lo; else ++saved_constrs[k]->hi;
-                                saved_constrs[k]->lit = newp;
-                                assump_ps.push(newp); assump_Cs.push(saved_constrs_Cs[k]);
-                                constrs.push(saved_constrs[k]);
-                                sat_solver.addClause(~p, newp);
-                                if (saved_constrs[k]->lo > 1 || saved_constrs[k]->hi < saved_constrs[k]->size - 1) assump_map.set(toInt(newp), k);
+                                constrs.push(saved_constrs[k]); 
+                                constrs.last()->lit = lit_Undef;
+                                modified_saved_constrs.push(k);
                             } else { saved_constrs[k]->~Linear(); saved_constrs[k] = NULL; }
                             assump_map.set(toInt(p), -1);
                         }
@@ -693,7 +678,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
 
         Int goal_diff = harden_goalval+fixed_goalval;
         if (opt_minimization == 1) {
-            assump_lit = goal_ps.size() > 1 ? mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true) : lit_Undef;
+            assump_lit = lit_Undef;
             try_lessthan = goal_diff + 2;
 	} else if (opt_minimization == 0 || best_goalvalue == Int_MAX || best_goalvalue - LB_goalvalue < opt_seq_thres) {
             assump_lit = (assump_ps.size() == 0 ? lit_Undef : mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true));
@@ -706,23 +691,35 @@ void MsSolver::maxsat_solve(solve_Command cmd)
  
         if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, assump_lit))
             break; // unsat
+        if (constrs.size() > 0 && (opt_minimization != 1 || !opt_delay_init_constraints)) {
+            convertPbs(false);
+            if (opt_minimization == 1) {
+                if (constrs.size() == modified_saved_constrs.size() + 1) assump_lit = constrs.last()->lit;
+                for (int i = 0, j = 0; i < modified_saved_constrs.size(); i++) {
+                    int k = modified_saved_constrs[i];
+                    Lit newp = constrs[j++]->lit;
+                    sat_solver.setFrozen(var(newp),true);
+                    saved_constrs[k]->lit = newp;
+                    assump_ps.push(newp); assump_Cs.push(saved_constrs_Cs[k]);
+                    if (saved_constrs[k]->lo > 1 || saved_constrs[k]->hi < saved_constrs[k]->size - 1)
+                        assump_map.set(toInt(newp), k);
+                }
+                modified_saved_constrs.clear();
+            }
+        }
         if (assump_lit != lit_Undef && !use_base_assump) {
             sat_solver.setFrozen(var(assump_lit),true);
             assump_ps.push(assump_lit); assump_Cs.push(opt_minimization == 2 ? try_lessthan : 
                                                        min_removed != Int_MAX && min_removed != 0 ? min_removed : 1);
         }
-        if (constrs.size() > 0 && (opt_minimization != 1 || !opt_delay_init_constraints)) convertPbs(false);
         if (opt_minimization == 1) {
             if (constrs.size() > 0 && constrs.last()->lit == assump_lit) {
                 Minisat::vec<Lit> new_assump; 
                 optimize_last_constraint(constrs, assump_ps, new_assump);
                 if (new_assump.size() > 0) {
                     delayed_assump_sum += Int(new_assump.size()) * assump_Cs.last();
-                    //Minisat::Lit l = assump_ps.last(); assump_ps.pop();
                     for (int i=0; i < new_assump.size(); i++) 
                         delayed_assump.push(Pair_new(assump_Cs.last(), new_assump[i]));
-                        //assump_ps.push(new_assump[i]), assump_Cs.push(assump_Cs.last());
-                    //assump_ps.push(l);
                 }
                 if (constrs.last()->lit != assump_lit) assump_lit = assump_ps.last() = constrs.last()->lit;
                 saved_constrs.push(constrs.last()), assump_map.set(toInt(assump_lit),saved_constrs.size() - 1);
@@ -762,7 +759,6 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                     assump_ps.size(), sorted_assump_Cs.size(), top_for_strat, toString(sorted_assump_Cs.size() > 0 ? sorted_assump_Cs.last() : 0)); xfree(t); }
         if (opt_minimization == 2 && opt_verbosity == 1 && use_base_assump) {
             char *t; reportf("Lower bound  = %s\n", t=toString(LB_goalvalue * goal_gcd)); xfree(t); }
-//switchToBinSearch:
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
                 Minisat::cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
@@ -773,11 +769,8 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 if (j < assump_ps.size() && psCs[i].fst == assump_ps[j]) j++;
             }
             if (opt_to_bin_search) {
-                for (int j = am1_rels.size() - 1, i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--) {
-                    while (j >= 0 && am1_rels[j].fst > assump_ps[i]) j--;
-                    if (j < 0 || am1_rels[j].fst < assump_ps[i]) sat_solver.addClause(~assump_ps[i]); 
+                for (int i = assump_ps.size() - 1; i >= 0 && assump_ps[i] > max_assump; i--)
                     assump_ps.pop(), assump_Cs.pop();
-                }
                 goal_ps.clear(); goal_Cs.clear();
                 bool clear_assump = (cnt * 3 >= assump_ps.size()); use_base_assump = clear_assump;
                 int k = 0;
@@ -802,17 +795,19 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 }
                 for (int i = 0; i < am1_rels.size(); i++) goal_ps.push(~am1_rels[i].fst), goal_Cs.push(am1_rels[i].snd);
                 top_for_strat = 0; sorted_assump_Cs.clear(); am1_rels.clear(); harden_lits.clear();
+                delayed_assump.clear(); delayed_assump_sum = 0;
                 if (opt_verbosity >= 1) {
                     reportf("Switching to binary search ... (after %g s and %d conflicts) with %d goal literals and %d assumptions\n", 
                             Minisat::cpuTime(), sat_solver.conflicts, goal_ps.size(), assump_ps.size());
                 }
                 opt_minimization = 2;
                 if (sat) {
-                    try_lessthan = best_goalvalue - fixed_goalval - harden_goalval; // evalPsCs(goal_ps, goal_Cs, best_model); 
-                    // try_lessthan = fixed_goalval + harden_goalval;
-                    assump_lit = (assump_ps.size() == 0 ? lit_Undef : mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true));
-                    if (assump_lit != lit_Undef) assump_ps.push(assump_lit), assump_Cs.push(try_lessthan);
-                    if (!addConstr(goal_ps, goal_Cs, try_lessthan, -2, assump_lit)) break; // unsat
+                    try_lessthan = best_goalvalue; 
+                    assump_lit = (assump_ps.size() == 0 && !use_base_assump ? lit_Undef : 
+                                                          mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true));
+                    if (assump_lit != lit_Undef && !use_base_assump) assump_ps.push(assump_lit), assump_Cs.push(try_lessthan);
+                    if (!addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval - harden_goalval, -2, assump_lit))
+                        break; // unsat
                     if (constrs.size() > 0) convertPbs(false);
                 }
             }
@@ -948,8 +943,6 @@ void MsSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assum
             for (int i = 0; i < ind.size(); i++) {
                 if (assump_Cs[ind[i]] == min_Cs) cls.push(assump_ps[ind[i]]), assump_Cs[ind[i]] = -assump_Cs[ind[i]];
                 else {
-                    //Lit r = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
-                    //sat_solver.addClause(assump_ps[ind[i]], r);
                     cls.push(assump_ps[ind[i]]); //~r);
                     assump_Cs[ind[i]] -= min_Cs;
                     if (assump_Cs[i] < max_assump_Cs) {

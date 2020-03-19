@@ -31,6 +31,7 @@ bool PbSolver::convertPbs(bool first_call)
 {
     vec<Formula>    converted_constrs;
     ConvertT saved_opt_convert = opt_convert;
+    int nvars = sat_solver.nVars(), ncls = sat_solver.nClauses();
 
     if (first_call){
         if (!opt_maxsat) findIntervals();
@@ -46,9 +47,7 @@ bool PbSolver::convertPbs(bool first_call)
 
         if (opt_verbosity >= 1) 
             if (first_call && !opt_maxsat) /**/ reportf("---[%4d]---> ", constrs.size() - 1 - i); 
-            //else if (i == 0 && constrs.size() == 1 opt_minimization != 1 && !opt_maxsat && !use_base_assump) /**/ reportf("---[goal]---> ");
-    
-        try { // M. Piotrow 11.10.2017
+        try {
             if (opt_convert == ct_Sorters)
                 converted_constrs.push(buildConstraint(c)), first_call ? ++srtEncodings : ++srtOptEncodings;
             else if (opt_convert == ct_Adders)
@@ -57,30 +56,14 @@ bool PbSolver::convertPbs(bool first_call)
                 converted_constrs.push(convertToBdd(c)), first_call ? ++bddEncodings : ++bddOptEncodings;
             else if (opt_convert == ct_Mixed) {
                 int adder_cost = estimatedAdderCost(c);
-                //int different_cs = 1; for (int i = 1; i < c.size; i++) if (c(i) != c(i-1)) different_cs++;
-                //**/printf("estimatedAdderCost: %d\n", estimatedAdderCost(c));
-                /*if (first_call || opt_convert_goal == opt_convert) {
-  	            Int max_coeff = c(c.size-1);
-  	            int max_log = 0; while ((max_coeff >>= 1) > 0) max_log++;
-                    double add_sort_factor = (max_log > 20 ? 1.0/(max_log-20) : max_log <= 10 ? 15.0 : 22.0-max_log);
-                    Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres * add_sort_factor));
-                    if (result == _undef_) {
-                        result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
-                        if (result != _undef_) 
-                            if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings;
-                    } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
-                    if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
-                    else converted_constrs.push(result);
-                } else*/ {
-                    Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres)); 
-                    if (result == _undef_) {
-                        result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
-                        if (result != _undef_)
-                            if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings; 
-                    } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
-                    if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
-                    else converted_constrs.push(result);
-                }
+                Formula result = buildConstraint(c, (int)(adder_cost * opt_sort_thres)); 
+                if (result == _undef_) {
+                    result = convertToBdd(c, (int)(adder_cost * opt_bdd_thres));
+                    if (result != _undef_)
+                        if (!first_call) opt_convert = ct_BDDs, ++bddOptEncodings; else ++bddEncodings; 
+                } else if (!first_call) opt_convert = ct_Sorters, ++srtOptEncodings; else ++srtEncodings;
+                if (result == _undef_) linearAddition(c, converted_constrs), first_call ? ++addEncodings : ++addOptEncodings;
+                else converted_constrs.push(result);
             } else assert(false);
             if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1)
                 constrs[i]->~Linear(), constrs[i] = NULL;
@@ -88,26 +71,31 @@ bool PbSolver::convertPbs(bool first_call)
                 clausify(sat_solver, converted_constrs); converted_constrs.clear();
             }
             opt_convert = saved_opt_convert;
-        } catch (std::bad_alloc& ba) { // M. Piotrow 11.10.2017
+        } catch (std::bad_alloc& ba) {
 	    FEnv::pop(); i-=1;
 	    if (opt_convert == ct_Sorters)  { opt_convert = ct_BDDs; continue; }
 	    if (opt_convert != ct_Adders)  { opt_convert = ct_Adders; continue; }
             else {
 	        reportf("Out of memery in converting constraints: %s\n",ba.what());
-	        exit(1); //throw(std::bad_alloc);
+	        exit(1);
 	    }
         }
         if (!okay()) return false;
     }
-    if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1)
-        constrs.clear(), mem.clear();
 
-    try { // M. Piotrow 15.06.2018
-        int nvars = sat_solver.nVars(), ncls = sat_solver.nClauses();
-        clausify(sat_solver, converted_constrs);
+    try {
+        if (!opt_maxsat_msu || !opt_shared_fmls || opt_minimization != 1) {
+            constrs.clear(), mem.clear();
+            clausify(sat_solver, converted_constrs);
+        } else {
+            vec<Lit> out;
+            clausify(sat_solver, converted_constrs, out);
+            for (int i = 0, j = 0; i < constrs.size(); i++) 
+                if (constrs[i] != NULL) constrs[i]->lit = out[j++];
+        }
         if (opt_verbosity >=2 && ((nvars -= sat_solver.nVars()) < 0 | (ncls -= sat_solver.nClauses()) < 0)) 
             reportf("New vars/cls: %d/%d\n", -nvars, -ncls);
-    } catch (std::bad_alloc& ba) { // M. Piotrow 15.06.2018
+    } catch (std::bad_alloc& ba) {
       reportf("Out of memery in clausifying constraints: %s\n",ba.what());
       exit(1);
     }

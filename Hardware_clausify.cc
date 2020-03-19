@@ -325,7 +325,7 @@ Lit Clausifier::basicClausify(Formula f)
 }
 
 
-void clausify(SimpSolver& s, const vec<Formula>& fs, Minisat::vec<Lit>& out)
+void clausify(SimpSolver& s, const vec<Formula>& fs, vec<Lit>& out)
 {
     Clausifier c(s);
 
@@ -353,7 +353,7 @@ void clausify(SimpSolver& s, const vec<Formula>& fs, Minisat::vec<Lit>& out)
 
 void clausify(SimpSolver& s, const vec<Formula>& fs)
 {
-    Minisat::vec<Lit>  out;
+    vec<Lit>  out;
     clausify(s, fs, out);
     extern PbSolver *pb_solver;
     if (pb_solver->use_base_assump && out.size() == 1)
