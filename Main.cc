@@ -74,6 +74,8 @@ bool     opt_to_bin_search = true;
 bool     opt_maxsat_prepr  = true;
 bool     opt_use_maxpre    = false;
 char     opt_maxpre_str[80]= "[bu]#[buvsrgc]";
+int      opt_maxpre_time   = 0;
+int      opt_maxpre_skip   = 0;
 
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
@@ -139,9 +141,13 @@ cchar* doc =
     "  -unsat-cpu=   Time to switch UNSAT search strategy to SAT/UNSAT. [def: %g s]\n"
     "  -lex-opt      Do Boolean lexicographic optimizations on soft clauses.\n"
     "  -no-bin       Do not switch from UNSAT to SAT/UNSAT search strategy.\n"
-    "  -maxpre       Use MaxPre - an extended MaxSAT preprocessor by Korhonen.\n"
-    "  -maxpre=      MaxPre technique selection string. [def: \"%s\"]\n"
     "  -no-ms-pre    Do not preprocess soft clauses (detect unit/am1 cores).\n"
+    "\n"
+    "MaxPre (an extended MaxSAT preprocessor by Korhonen) specific options:\n"
+    "  -maxpre       Use MaxPre with the default techniques and no skip and no time limit.\n"
+    "  -maxpre=      MaxPre technique selection string. [def: \"%s\"]\n"
+    "  -maxpre-skip= MaxPre skip ineffective technique after given tries (between 10 and 1000).\n"
+    "  -maxpre-time= MaxPre time limit in seconds for preprocessing (0 - no limit).\n"
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -237,6 +243,10 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
             else if (strncmp(arg, "-maxpre=",   8) == 0) 
                 opt_use_maxpre = true, strncpy(opt_maxpre_str,arg+8,sizeof(opt_maxpre_str));
+            else if (strncmp(arg, "-maxpre-skip=", 13) == 0) 
+                opt_use_maxpre = true, opt_maxpre_skip  = atoi(arg+13);
+            else if (strncmp(arg, "-maxpre-time=", 13) == 0) 
+                opt_use_maxpre = true, opt_maxpre_time  = atoi(arg+13);
             else
                 fprintf(stderr, "ERROR! Invalid command line option: %s\n", argv[i]), exit(1);
 
@@ -300,15 +310,29 @@ void outputResult(const PbSolver& S, bool optimum = true)
     if (!opt_satlive || resultsPrinted) return;
 
     if (opt_model_out && S.best_goalvalue != Int_MAX){
-        printf("v");
         if (opt_use_maxpre) {
             std::vector<int> trueLiterals, model;
             for (int i = 0; i < S.best_model.size(); i++)
                 trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
             model = maxpre_ptr->reconstruct(trueLiterals);
+            if (!optimum) {
+                Int sum = 0;
+                vec<bool> bmodel( abs(model.back()) + 1);
+                for (int i = model.size() - 1; i >= 0; i--) bmodel[abs(model[i])] = (model[i] > 0);
+                for (int j, i = pb_solver->orig_soft_cls.size() - 1; i >= 0; i--) {
+                    for (j = pb_solver->orig_soft_cls[i].snd->size() - 1; j >= 0; j--) {
+                        Lit p = (*pb_solver->orig_soft_cls[i].snd)[j];
+                        if ((sign(p) && !bmodel[var(p)]) || (!sign(p) && bmodel[var(p)])) break;
+                    }
+                    if (j < 0) sum += pb_solver->orig_soft_cls[i].fst;
+                }
+                if (sum < S.best_goalvalue) printf("o %s\n", toString(sum));
+            }
+            printf("v");
             for (unsigned i = 0; i < model.size(); i++)
                 printf(" %d", model[i]);
         } else {
+            printf("v");
             for (int i = 0; i < S.best_model.size(); i++)
                 if (S.index2name[i][0] != '#')
                     printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
@@ -333,12 +357,34 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     static int lst = 0;
     if (!opt_satlive || resultsPrinted) return;
     if (opt_model_out && S.best_goalvalue != Int_MAX){
-        buf[0] = '\n'; buf[1] = 'v'; lst += 2;
         if (opt_use_maxpre) {
             std::vector<int> trueLiterals, model;
             for (int i = 0; i < S.best_model.size(); i++)
                 trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
             model = maxpre_ptr->reconstruct(trueLiterals);
+            if (!optimum) {
+                Int sum = 0;
+                vec<bool> bmodel( abs(model.back()) + 1);
+                for (int i = model.size() - 1; i >= 0; i--) bmodel[abs(model[i])] = (model[i] > 0);
+                for (int j, i = pb_solver->orig_soft_cls.size() - 1; i >= 0; i--) {
+                    for (j = pb_solver->orig_soft_cls[i].snd->size() - 1; j >= 0; j--) {
+                        Lit p = (*pb_solver->orig_soft_cls[i].snd)[j];
+                        if ((sign(p) && !bmodel[var(p)]) || (!sign(p) && bmodel[var(p)])) break;
+                    }
+                    if (j < 0) sum += pb_solver->orig_soft_cls[i].fst;
+                }
+                if (sum < pb_solver->best_goalvalue * pb_solver->goal_gcd) {
+                    buf[lst++] = '\n'; buf[lst++] = 'o'; buf[lst++] = ' ';
+                    if (sum == 0) buf[lst++] =  '0';
+                    else {
+                        char *first = buf + lst;
+                        while (sum > 0) buf[lst++] = '0' + toint(sum%10), sum /= 10;
+                        for (char *last = buf+lst-1; first < last; first++, last--) { 
+                            char c = *first; *first = *last; *last = c; }
+                    }
+                }
+            }
+            buf[lst++] = '\n'; buf[lst++] = 'v';
             for (unsigned i = 0; i < model.size(); i++) {
                 if (lst + 15 >= BUF_SIZE) { 
                     buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
@@ -351,6 +397,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
                     char c = *first; *first = *last; *last = c; }
             }
         } else {
+            buf[0] = '\n'; buf[1] = 'v'; lst += 2;
             for (int i = 0; i < S.best_model.size(); i++)
                 if (S.index2name[i][0] != '#') {
                     int sz = strlen(S.index2name[i]);

@@ -62,25 +62,24 @@ void PbSolver::addGoal(const vec<Lit>& ps, const vec<Int>& Cs)
     goal = new (xmalloc<char>(sizeof(Linear) + ps.size()*(sizeof(Lit) + sizeof(Int)))) Linear(ps, Cs, Int_MIN, Int_MAX, lit_Undef);
 }
 
-bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit) {
+bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit& lit) {
   vec<Lit>    norm_ps;
   vec<Int>    norm_Cs;
   Int         norm_rhs;
-  Lit         norm_lit;
 
-  #define Copy    do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push( Cs[i]); norm_rhs =  rhs;  norm_lit = lit; }while(0)
-  #define CopyInv do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push(-Cs[i]); norm_rhs = -rhs;  norm_lit = lit; }while(0)
+  #define Copy    do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push( Cs[i]); norm_rhs =  rhs; }while(0)
+  #define CopyInv do{ norm_ps.clear(); norm_Cs.clear(); for (int i = 0; i < ps.size(); i++) norm_ps.push(ps[i]), norm_Cs.push(-Cs[i]); norm_rhs = -rhs; }while(0)
 
   // non-normalize ORIGINAL
   if (ineq == 0){
 
     Copy;
-    if (normalizePb(norm_ps, norm_Cs, norm_rhs, norm_lit))
-      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+    if (normalizePb(norm_ps, norm_Cs, norm_rhs, lit))
+      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, lit);
 
     CopyInv;
-    if (normalizePb(norm_ps, norm_Cs, norm_rhs, norm_lit))
-      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+    if (normalizePb(norm_ps, norm_Cs, norm_rhs, lit))
+      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, lit);
   }else{
     if (ineq > 0)
       Copy;
@@ -91,8 +90,8 @@ bool PbSolver::addConstr(const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int in
     if (ineq == 2)
       ++norm_rhs;
 
-    if (normalizePb(norm_ps, norm_Cs, norm_rhs, norm_lit))
-      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, norm_lit);
+    if (normalizePb(norm_ps, norm_Cs, norm_rhs, lit))
+      storePb(norm_ps, norm_Cs, norm_rhs, Int_MAX, lit);
   }
   return okay();
 }
@@ -118,7 +117,7 @@ static Int gcd(Int small, Int big) {
 // TRUE is returned.
 //
 
-bool PbSolver::normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
+bool PbSolver::normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit& lit)
 {
     assert(ps.size() == Cs.size());
     if (!okay()) return false;
@@ -179,6 +178,10 @@ bool PbSolver::normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit)
     ps.shrink(ps.size() - Csps.size());
     Cs.shrink(Cs.size() - Csps.size());
 
+    if (opt_maxsat_msu && opt_minimization == 1 && lit == lit_Undef && C >= sum && C != 0) {
+        lit = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars));
+        sat_solver.setFrozen(var(lit), true);
+    }
     // Propagate already present consequences:
     //
     bool changed;
@@ -474,7 +477,8 @@ bool PbSolver::rewriteAlmostClauses()
             for (int j = 0; j < n; j++)
                 ps.push(c[j]),
                 Cs.push(c(j));
-            if (!addConstr(ps, Cs, c.lo, 1, lit_Undef)){
+            Lit lit = lit_Undef;
+            if (!addConstr(ps, Cs, c.lo, 1, lit)){
                 reportf("\n");
                 return false; }
 
@@ -567,9 +571,10 @@ void PbSolver::solve(solve_Command cmd)
         opt_convert = opt_convert_goal;
     opt_sort_thres *= opt_goal_bias;
     opt_shared_fmls = use_base_assump = true;
+    Lit assump_lit = lit_Undef;
 
     if (opt_goal != Int_MAX)
-        addConstr(goal_ps, goal_Cs, opt_goal, -1, lit_Undef),
+        addConstr(goal_ps, goal_Cs, opt_goal, -1, assump_lit),
         convertPbs(false);
 
     if (opt_cnf != NULL)
@@ -585,7 +590,6 @@ void PbSolver::solve(solve_Command cmd)
     Minisat::vec<Lit> assump_ps;
     Int     try_lessthan = opt_goal;
     int     n_solutions = 0;    // (only for AllSolutions mode)
-    Lit     assump_lit = lit_Undef;
 
     LB_goalvalue = 0, UB_goalvalue = 0; 
     if (goal != NULL)

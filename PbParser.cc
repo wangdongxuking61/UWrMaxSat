@@ -260,7 +260,8 @@ bool parseConstrs(B& in, S& solver, bool old_format)
         if (!skipText(in, ";")) throw xstrdup("Expecting ';' after constraint.");
         skipEndOfLine(in);
 
-        if (!solver.addConstr(ps, Cs, rhs, ineq, lit_Undef))
+        Lit lit = lit_Undef;
+        if (!solver.addConstr(ps, Cs, rhs, ineq, lit))
             return false;
         ps.clear();
         Cs.clear();
@@ -327,6 +328,8 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
 
     extern bool opt_use_maxpre;
     extern char opt_maxpre_str[80];
+    extern int  opt_maxpre_time;
+    extern int  opt_maxpre_skip;
     extern maxPreprocessor::PreprocessorInterface *maxpre_ptr;
     std::vector<std::vector<int> > clauses;
     std::vector<uint64_t>  weights;
@@ -338,12 +341,14 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         while (1) {
             bool negated = parseLit(in,tmp);
             if (tmp.size() == 2 && tmp[0] == '0') break;
-            if (opt_use_maxpre) clauses.back().push_back(negated ? -atoi(tmp) : atoi(tmp));
+            int v = atoi(tmp);
+            if (opt_use_maxpre) clauses.back().push_back(negated ? -v : v), ps.push(mkLit(v, negated));
             else ps.push(mkLit(solver.getVar(tmp), negated));
         }
         skipEndOfLine(in);
         if (opt_use_maxpre) {
             weights.push_back(tolong(weight));
+            if (weight < hard_bound) solver.storeSoftClause(ps, tolong(weight));
         } else if (weight >= hard_bound) {
             if (!solver.addClause(ps)) return false;
         } else {
@@ -364,10 +369,12 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
                 opt_maxpre_str);
         uint64_t topWeight = tolong(hard_bound);
         maxpre_ptr = new maxPreprocessor::PreprocessorInterface(clauses, weights, topWeight);
-        //maxpre_ptr->setSkipTechnique(100);
-        maxpre_ptr->preprocess(std::string(opt_maxpre_str));
+        if (opt_maxpre_skip >= 10) maxpre_ptr->setSkipTechnique(opt_maxpre_skip);
+        if (opt_maxpre_time > 0)   maxpre_ptr->preprocess(std::string(opt_maxpre_str), 0, opt_maxpre_time);
+        else                       maxpre_ptr->preprocess(std::string(opt_maxpre_str));
         if (opt_verbosity > 0) maxpre_ptr->printTimeLog(std::cout);
-        clauses.clear(); weights.clear();
+        solver.soft_cls.moveTo(solver.orig_soft_cls);
+        solver.soft_cls.clear(); clauses.clear(); weights.clear();
         std::vector<int> labels;
         maxpre_ptr->getInstance(clauses, weights, labels);
         assert(clauses.size() == weights.size());

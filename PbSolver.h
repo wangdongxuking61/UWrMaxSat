@@ -139,7 +139,7 @@ public:
         tmp_clause.clear(); for (int i = 0; i < ps.size(); i++) tmp_clause.push(ps[i]);
         return sat_solver.addClause_(tmp_clause); }
 protected:        
-    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit lit);
+    bool    normalizePb(vec<Lit>& ps, vec<Int>& Cs, Int& C, Lit& lit);
     void    storePb   (const vec<Lit>& ps, const vec<Int>& Cs, Int lo, Int hi, Lit lit);
     void    setupOccurs();   // Called on demand from 'propagate()'.
     void    findIntervals();
@@ -193,7 +193,7 @@ public:
     int     getVar         (cchar* name);
     void    allocConstrs   (int n_vars, int n_constrs);
     void    addGoal        (const vec<Lit>& ps, const vec<Int>& Cs);
-    bool    addConstr      (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit lit);
+    bool    addConstr      (const vec<Lit>& ps, const vec<Int>& Cs, Int rhs, int ineq, Lit& lit);
 
     // Solve:
     //

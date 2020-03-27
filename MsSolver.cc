@@ -285,6 +285,7 @@ void MsSolver::optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>
                 convertPbs(false);
                 Lit newp = constrs[0]->lit;
                 sat_solver.setFrozen(var(newp),true);
+                sat_solver.addClause(~assump_ps.last(), newp);
                 new_assump.push(assump_ps.last()); assump_ps.last() = newp;
                 if (sat_solver.solveLimited(assump_ps) != l_False) break;
                 found = false;
@@ -327,7 +328,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         sat_solver.setFrozen(var(soft_cls[i].snd->last()), true);
     sat_solver.verbosity = opt_verbosity - 1;
 
-    weight_t goal_gcd = soft_cls[0].fst;
+    goal_gcd = soft_cls[0].fst;
     for (int i = 1; i < soft_cls.size() && goal_gcd != 1; ++i) goal_gcd = gcd(goal_gcd, soft_cls[i].fst);
     if (goal_gcd != 1) {
         if (LB_goalvalue != Int_MIN) LB_goalvalue /= Int(goal_gcd);
@@ -416,7 +417,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     else {
         for (int i = 0; i < psCs.size(); i++)
             goal_ps.push(~psCs[i].fst), goal_Cs.push(soft_cls[psCs[i].snd].fst);
-        try_lessthan = ++UB_goalvalue;
+        if (try_lessthan == Int_MAX) try_lessthan = ++UB_goalvalue;
         if (goal_ps.size() > 0) {
             addConstr(goal_ps, goal_Cs, try_lessthan - fixed_goalval, -2, assump_lit);
             convertPbs(false);
@@ -699,6 +700,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                     int k = modified_saved_constrs[i];
                     Lit newp = constrs[j++]->lit;
                     sat_solver.setFrozen(var(newp),true);
+                    sat_solver.addClause(~saved_constrs[k]->lit, newp);
                     saved_constrs[k]->lit = newp;
                     assump_ps.push(newp); assump_Cs.push(saved_constrs_Cs[k]);
                     if (saved_constrs[k]->lo > 1 || saved_constrs[k]->hi < saved_constrs[k]->size - 1)
@@ -830,8 +832,9 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             reportf("\bFirst solution found: %s\b\n", tmp);
             xfree(tmp);
         }else if (asynch_interrupt){
+            extern bool opt_use_maxpre;
             char* tmp = toString(best_goalvalue);
-            reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
+            if (!opt_use_maxpre) reportf("\bSATISFIABLE: Best solution found: %s\b\n", tmp);
             xfree(tmp);
        }else{
             char* tmp = toString(best_goalvalue);
