@@ -527,7 +527,11 @@ int main(int argc, char** argv)
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
-        parse_PB_file(opt_input, *pb_solver, opt_old_format);
+        {
+            bool opt = opt_maxsat_msu; opt_maxsat_msu = false;
+            parse_PB_file(opt_input, *pb_solver, opt_old_format);
+            opt_maxsat_msu = opt;
+        }
         if (opt_convert == ct_Undef) opt_convert = ct_Mixed;
         if (!opt_maxsat_msu) {
             if (opt_minimization < 0) opt_minimization = 2; // bin (sat/unsat based) algorithm
@@ -541,8 +545,8 @@ int main(int argc, char** argv)
                 }
                 delete pb_solver->goal; pb_solver->goal = NULL;
             }
-            opt_maxsat = opt_maxsat_msu = true;
-            if (opt_minimization < 0) opt_minimization = 1; // bin (sat/unsat based) algorithm
+            opt_maxsat = true;
+            if (opt_minimization < 0) opt_minimization = 1; // alt (unsat based) algorithm
             pb_solver->maxsat_solve(convert(opt_command));
         }
     }
