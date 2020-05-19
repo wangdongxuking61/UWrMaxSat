@@ -89,16 +89,22 @@ bool satisfied_soft_cls(Minisat::vec<Lit> *cls, vec<bool>& model)
 }
 
 
-Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model)
+Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model, 
+        Minisat::vec<Lit>&soft_unsat)
 {
     Int sum = 0;
     bool sat = false;
+    soft_unsat.clear();
     for (int i = 0; i < soft_cls.size(); i++) {
         Lit p = soft_cls[i].snd->last(); if (soft_cls[i].snd->size() == 1) p = ~p;
         assert(var(p) < model.size());
         if ((( sign(p) && !model[var(p)]) || (!sign(p) &&  model[var(p)])) 
-            && !(sat = satisfied_soft_cls(soft_cls[i].snd, model)))
+            && !(sat = satisfied_soft_cls(soft_cls[i].snd, model))) {
+            if (opt_output_top > 0) soft_unsat.push(~p);
             sum += soft_cls[i].fst;
+        } else if (opt_output_top > 0) {
+            soft_unsat.push(p);
+        }
         if (sat) { sat = false; model[var(p)] = !model[var(p)]; }
     }
     return sum;
@@ -210,8 +216,8 @@ static void opt_stratification(vec<weight_t>& sorted_assump_Cs, vec<Pair<Int, bo
 
 template <class T> struct LT {bool operator()(T x, T y) { return x.snd->last() < y.snd->last(); }};
 
-static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs, vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, int& top_for_strat,
-                                            Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
+static weight_t do_stratification(SimpSolver& S, vec<weight_t>& sorted_assump_Cs, vec<Pair<weight_t,
+        Minisat::vec<Lit>* > >& soft_cls, int& top_for_strat, Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs)
 {
     weight_t  max_assump_Cs;
     max_assump_Cs = sorted_assump_Cs.last(); sorted_assump_Cs.pop();
@@ -368,6 +374,9 @@ void MsSolver::maxsat_solve(solve_Command cmd)
          opt_core_minimization = (nClauses() > 0 || soft_cls.size() < 100000);
     IntLitQueue delayed_assump;
     Int delayed_assump_sum = 0;
+    BitMap top_impl_gen(true);
+    vec<Int> top_UB_stack;
+    bool optimum_found = false;
 
     Int LB_goalval = 0, UB_goalval = 0;    
     sort(&soft_cls[0], soft_cls.size(), LT<Pair<weight_t, Minisat::vec<Lit>*> >());
@@ -445,8 +454,8 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             if (multi_level_opt.last()) ml_opt++;
         }
         opt_stratification(sorted_assump_Cs, sum_sorted_soft_cls);
-        opt_lexicographic = true;
-        if (opt_verbosity >= 1 && ml_opt > 0) 
+        opt_lexicographic = (opt_output_top < 0); // true;
+        if (opt_verbosity >= 1 && ml_opt > 0 && opt_output_top < 0) 
             reportf("Boolean lexicographic optimization can be done in %d point(s).%s\n", 
                     ml_opt, (opt_lexicographic ? "" : " Try -lex-opt option."));
         max_assump_Cs = do_stratification(sat_solver, sorted_assump_Cs, soft_cls, top_for_strat, assump_ps, assump_Cs);
@@ -517,25 +526,56 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             sat_solver.addClause_(ban);
         }else{
             vec<bool> model;
+            Minisat::vec<Lit> soft_unsat;
             for (Var x = 0; x < pb_n_vars; x++)
                 assert(sat_solver.model[x] != l_Undef),
                 model.push(sat_solver.model[x] == l_True);
             for (int i = 0; i < top_for_strat; i++)
                 if (soft_cls[i].snd->size() > 1)
                     model[var(soft_cls[i].snd->last())] = !sign(soft_cls[i].snd->last());
-            Int goalvalue = evalGoal(soft_cls, model) + fixed_goalval;
+            Int goalvalue = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
             if (goalvalue < best_goalvalue) {
                 best_goalvalue = goalvalue;
                 model.moveTo(best_model);
                 char* tmp = toString(best_goalvalue * goal_gcd);
-                if (opt_satlive || opt_verbosity == 0)
+                if (opt_output_top < 0 && (opt_satlive || opt_verbosity == 0))
                     printf("o %s\n", tmp), fflush(stdout);
-                else reportf("\bFound solution: %s\b\n", tmp);
+                else if (opt_verbosity > 0) reportf("%s solution: %s\n", (optimum_found ? "Next" : "Found"), tmp);
                 xfree(tmp);
             } else model.clear(); 
-            if (best_goalvalue < UB_goalvalue) UB_goalvalue = best_goalvalue;
-
-            if (cmd == sc_FirstSolution || (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) && sorted_assump_Cs.size() == 0 && delayed_assump.empty()) break;
+            if (best_goalvalue < UB_goalvalue && opt_output_top < 0) UB_goalvalue = best_goalvalue;
+            else if (opt_output_top > 1) {
+                while (top_UB_stack.size() > 0 && top_UB_stack.last() < best_goalvalue) top_UB_stack.pop();
+                if (top_UB_stack.size() == 0 || top_UB_stack.last() > best_goalvalue) top_UB_stack.push(best_goalvalue);
+                if (top_UB_stack.size() >= opt_output_top) {
+                    Int &bound = top_UB_stack[top_UB_stack.size() - opt_output_top];
+                    if (bound < UB_goalvalue) UB_goalvalue = bound;
+                }
+            }
+            if (cmd == sc_FirstSolution || (opt_minimization == 1 || UB_goalvalue == LB_goalvalue) &&
+                                           sorted_assump_Cs.size() == 0 && delayed_assump.empty())
+                if (opt_minimization == 1 && opt_output_top > 0) {
+                    outputResult(*this, false);
+                    if (opt_verbosity > 0 && !optimum_found) {
+                        optimum_found = true;
+                        char* tmp = toString(best_goalvalue * goal_gcd);
+                        reportf(" OPT SOLUTION: %s\n", tmp);
+                        xfree(tmp);
+                    }
+                    if (--opt_output_top == 0) break;
+                    else { 
+                        best_goalvalue = Int_MAX;
+                        if (soft_unsat.size() > 0) sat_solver.addClause(soft_unsat);
+                        for (int i = 0; i < soft_cls.size(); i++)
+                            if (soft_unsat[i] == soft_cls[i].snd->last() && soft_cls[i].snd->size() > 1 && 
+                                    top_impl_gen.at(var(soft_unsat[i]))) {
+                                top_impl_gen.set(var(soft_unsat[i]), false);
+                                for (int j = soft_cls[i].snd->size() - 2; j >= 0; j--)
+                                    sat_solver.addClause(~soft_unsat[i], ~(*soft_cls[i].snd)[j]);
+                            }
+                        continue;
+                    }
+                } else break;
             if (opt_minimization == 1) {
                 assert(sorted_assump_Cs.size() > 0 || !delayed_assump.empty()); 
                 int old_top = top_for_strat;
@@ -597,7 +637,10 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             convertPbs(false);
         }
       } else { // UNSAT returned
-        if (assump_ps.size() == 0 && assump_lit == lit_Undef) break;
+        if (assump_ps.size() == 0 && assump_lit == lit_Undef) {
+            if (opt_output_top > 0) printf("v \n");
+            break;
+        }
         {
         Minisat::vec<Lit> core_mus;
         if (opt_core_minimization) {
@@ -689,7 +732,6 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars)) : assump_lit;
 	    try_lessthan = (LB_goalvalue*(100-opt_bin_percent) + best_goalvalue*(opt_bin_percent))/100;
 	}
- 
         if (!addConstr(goal_ps, goal_Cs, try_lessthan - goal_diff, -2, assump_lit))
             break; // unsat
         if (constrs.size() > 0 && (opt_minimization != 1 || !opt_delay_init_constraints)) {
@@ -822,7 +864,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (LB_goalvalue   != Int_MIN) LB_goalvalue *= goal_gcd;
         if (UB_goalvalue   != Int_MAX) UB_goalvalue *= goal_gcd;
     }
-    if (opt_verbosity >= 1){
+    if (opt_verbosity >= 1 && opt_output_top < 0){
         if      (!sat)
             reportf(asynch_interrupt ? "\bUNKNOWN\b\n" : "\bUNSATISFIABLE\b\n");
         else if (soft_cls.size() == 0 && best_goalvalue == INT_MAX)

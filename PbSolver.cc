@@ -646,6 +646,7 @@ void PbSolver::solve(solve_Command cmd)
             sat_solver.addClause_(ban);
         }else{
             vec<bool> model;
+            Minisat::vec<Lit> soft_unsat;
             for (Var x = 0; x < pb_n_vars; x++)
                 assert(sat_solver.model[x] != l_Undef),
                     model.push(sat_solver.model[x] == l_True);
@@ -653,7 +654,7 @@ void PbSolver::solve(solve_Command cmd)
                 model.moveTo(best_model);
                 break;
             }
-            Int goalvalue = (opt_maxsat ? evalGoal(((MsSolver *)this)->soft_cls, model) : evalGoal(*goal, sat_solver.model)) / goal_gcd;
+            Int goalvalue = (opt_maxsat ? evalGoal(((MsSolver *)this)->soft_cls, model, soft_unsat) : evalGoal(*goal, sat_solver.model)) / goal_gcd;
             if (goalvalue < best_goalvalue) {
                 best_goalvalue = goalvalue;
                 model.moveTo(best_model);
@@ -753,47 +754,3 @@ void PbSolver::printStats()
     }
 }
 
-static Var mapVar(Var x, Minisat::vec<Var>& map, Var& max)
-{
-    if (map.size() <= x || map[x] == -1){
-        map.growTo(x+1, -1);
-        map[x] = max++;
-    }
-    return map[x];
-}
-
-
-void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls, int soft_cnt)
-{
-    Minisat::vec<Var> map; Var max=0;
-    int cnt;
-
-    if (!ok) max=1, cnt=2;
-    else {
-        cnt = assumptions.size();
-        for (int i = 0; i < clauses.size(); i++)
-          if (!satisfied(ca[clauses[i]])) {
-	      cnt++;
-              Minisat::Clause& c = ca[clauses[i]];
-	      for (int j = 0; j < c.size(); j++)
-	          if (value(c[j]) != l_False)
-	              mapVar(var(c[j]), map, max);
-        }
-        if (soft_cls != NULL)
-            for (int i = 0; i < soft_cls->size(); i++) {
-                Minisat::vec<Lit>& c = *(*soft_cls)[i].snd;
-                for (int j = 0; j < c.size(); j++)
-	            if (value(c[j]) != l_False)
-	                mapVar(var(c[j]), map, max);
-            }
-
-    }
-    printf("c ============================[ %s Statistics ]============================\n", 
-            encoding ? "Encoding" : " Problem");
-    printf("c |  Number of variables:  %12d                                         |\n", max);
-    if (soft_cnt == 0)
-        printf("c |  Number of clauses:    %12d                                         |\n", cnt);
-    else
-        printf("c |  Number of clauses:    %12d (incl. %12d soft in queue)      |\n", cnt + soft_cnt, soft_cnt);
-    printf("c ===============================================================================\n");
-}

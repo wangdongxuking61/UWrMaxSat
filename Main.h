@@ -21,6 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Main_h
 
 #include "Int.h"
+#include "PbSolver.h"
 
 //=================================================================================================
 
@@ -36,6 +37,7 @@ extern bool     opt_ansi;
 extern char*    opt_cnf;
 extern int      opt_verbosity;
 extern bool     opt_try;
+extern int      opt_output_top;
 
 // -- solver options:
 extern ConvertT opt_convert;
@@ -72,6 +74,7 @@ extern unsigned long long int srtOptEncodings, addOptEncodings, bddOptEncodings;
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void reportf(const char* format, ...);      // 'printf()' replacer -- will put "c " first at each line if 'opt_satlive' is TRUE.
+void outputResult(const PbSolver& S, bool optimum = true);
 
 
 //=================================================================================================

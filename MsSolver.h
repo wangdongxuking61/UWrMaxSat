@@ -24,7 +24,7 @@
 
 #include "PbSolver.h"
 
-Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model);
+Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model, Minisat::vec<Lit>& soft_unsat);
 
 static inline int hleft (int i)  { return i * 2; }
 static inline int hright(int i)  { return i * 2 + 1; }

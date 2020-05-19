@@ -45,7 +45,9 @@ bool     opt_ansi      = true;
 char*    opt_cnf       = NULL;
 int      opt_verbosity = 1;
 bool     opt_model_out = true;
+bool     opt_bin_model_out = false;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
+int      opt_output_top    = -1;
 
 bool     opt_preprocess    = true;
 ConvertT opt_convert       = ct_Undef;
@@ -135,6 +137,8 @@ cchar* doc =
     "  -v0,-v1,-v2   Set verbosity level (1 default)\n"
     "  -cnf=<file>   Write SAT problem to a file. Trivial UNSAT => no file written.\n"
     "  -nm -no-model Supress model output.\n"
+    "  -bm -bin-model Output MaxSAT model as a binary (0-1) string.\n"
+    "  -top=         Output only a given number top models as v-lines. No o-lines and s-lines.\n"
     "\n"
     "MaxSAT specific options:\n"
     "  -no-msu       Use PB specific search algoritms for MaxSAT (see -alt, -bin, -seq).\n"
@@ -197,7 +201,8 @@ void parseOptions(int argc, char** argv)
 
             else if (oneof(arg, "w,weak-off"     )) opt_convert_weak = false;
             else if (oneof(arg, "no-pre"))          opt_preprocess   = false;
-            else if (oneof(arg, "nm,no-model" ))    opt_model_out    = false;
+            else if (oneof(arg, "nm,no-model" ))    opt_model_out = opt_bin_model_out = false;
+            else if (oneof(arg, "bm,bin-model" ))   opt_model_out = opt_bin_model_out = true;
             else if (oneof(arg, "no-msu" ))         opt_maxsat_msu   = false;
 
             //(make nicer later)
@@ -247,6 +252,9 @@ void parseOptions(int argc, char** argv)
                 opt_use_maxpre = true, opt_maxpre_skip  = atoi(arg+13);
             else if (strncmp(arg, "-maxpre-time=", 13) == 0) 
                 opt_use_maxpre = true, opt_maxpre_time  = atoi(arg+13);
+            else if (strncmp(arg, "-top=", 5) == 0) 
+                opt_minimization = 1, opt_maxsat_msu = true, opt_to_bin_search = false, 
+                opt_output_top  = atoi(arg+5);
             else
                 fprintf(stderr, "ERROR! Invalid command line option: %s\n", argv[i]), exit(1);
 
@@ -305,7 +313,7 @@ void reportf(const char* format, ...)
 MsSolver*   pb_solver = NULL;   // Made global so that the SIGTERM handler can output best solution found.
 static bool resultsPrinted = false;
 
-void outputResult(const PbSolver& S, bool optimum = true)
+void outputResult(const PbSolver& S, bool optimum)
 {
     if (!opt_satlive || resultsPrinted) return;
 
@@ -328,9 +336,21 @@ void outputResult(const PbSolver& S, bool optimum = true)
                 }
                 if (sum < S.best_goalvalue) printf("o %s\n", toString(sum));
             }
-            printf("v");
-            for (unsigned i = 0; i < model.size(); i++)
-                printf(" %d", model[i]);
+            if (opt_bin_model_out) {
+                printf("v ");
+                for (int i = 0; i < (int)model.size(); i++) {
+                    assert(model[i] == i+1 || model[i] == -i-1);
+                    putchar(model[i] < 0 ? '0' : '1');
+                }
+            } else {
+                printf("v");
+                for (unsigned i = 0; i < model.size(); i++)
+                    printf(" %d", model[i]);
+            }
+        } else if (opt_bin_model_out) {
+            printf("v ");
+            for (int i = 0; i < S.declared_n_vars; i++)
+                putchar(S.best_model[i]? '1' : '0');
         } else {
             printf("v");
             for (int i = 0; i < S.best_model.size(); i++)
@@ -339,15 +359,17 @@ void outputResult(const PbSolver& S, bool optimum = true)
         }
         printf("\n");
     }
-    if (optimum){
-        if (S.best_goalvalue == Int_MAX) printf("s UNSATISFIABLE\n");
-        else                             printf("s OPTIMUM FOUND\n");
-    }else{
-        if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
-        else                             printf("s SATISFIABLE\n");
-    }
+    if (opt_output_top < 0) {
+        if (optimum){
+            if (S.best_goalvalue == Int_MAX) printf("s UNSATISFIABLE\n");
+            else                             printf("s OPTIMUM FOUND\n");
+        }else{
+            if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
+            else                             printf("s SATISFIABLE\n");
+        }
+        resultsPrinted = true;
+    } else if (opt_output_top == 1) resultsPrinted = true;
     fflush(stdout);
-    resultsPrinted = true;
 }
 
 static void handlerOutputResult(const PbSolver& S, bool optimum = true)
@@ -355,7 +377,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     constexpr int BUF_SIZE = 50000;
     static char buf[BUF_SIZE];
     static int lst = 0;
-    if (!opt_satlive || resultsPrinted) return;
+    if (!opt_satlive || resultsPrinted || opt_output_top >= 0) return;
     if (opt_model_out && S.best_goalvalue != Int_MAX){
         if (opt_use_maxpre) {
             std::vector<int> trueLiterals, model;
@@ -527,6 +549,7 @@ int main(int argc, char** argv)
         }
     } else {
         if (opt_verbosity >= 1) reportf("Parsing PB file...\n");
+        opt_bin_model_out = false;
         {
             bool opt = opt_maxsat_msu; opt_maxsat_msu = false;
             parse_PB_file(opt_input, *pb_solver, opt_old_format);

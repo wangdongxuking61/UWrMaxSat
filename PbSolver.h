@@ -20,38 +20,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef PbSolver_h
 #define PbSolver_h
 
-#include "minisat/mtl/Vec.h"
-#include "minisat/simp/SimpSolver.h"
-
+#include "SatSolver.h"
 #include "Map.h"
 #include "StackAlloc.h"
-
-#if defined(GLUCOSE3) || defined(GLUCOSE4)
-namespace Minisat = Glucose;
-#endif
-#ifdef GLUCOSE4
-#define rnd_decisions stats[14]
-#define max_literals  stats[21]
-#define tot_literals  stats[22]
-#endif
-
-using Minisat::Var;
-using Minisat::Lit;
-using Minisat::SimpSolver;
-using Minisat::lbool;
-using Minisat::mkLit;
-using Minisat::lit_Undef;
-#ifdef MINISAT
-using Minisat::l_Undef;
-using Minisat::l_True;
-using Minisat::l_False;
-using Minisat::var_Undef;
-#define VAR_UPOL l_Undef
-#define LBOOL    lbool
-#else
-#define VAR_UPOL true
-#define LBOOL
-#endif
 
 #ifdef BIG_WEIGHTS
 using weight_t = Int; 
@@ -63,11 +34,6 @@ static inline const char *toString(weight_t x) { static char buf[30]; sprintf(bu
 #endif
 
 DefineHash(Lit, return (uint)toInt(key); )
-
-class ExtSimpSolver: public SimpSolver {
-public:
-    void printVarsCls(bool encoding = true, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls = NULL, int soft_cls_sz = 0);
-};
 
 //=================================================================================================
 // Linear -- a class for storing pseudo-boolean constraints:
