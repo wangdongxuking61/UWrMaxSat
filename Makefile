@@ -18,9 +18,9 @@ BUILD_DIR      ?= build
 MINISATP_RELSYM ?= 
 
 # Sets of compile flags for different build types
-MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS 
-MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D COMINISATPS 
-MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS 
+MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS $(MAXPRE) $(BIGWEIGHTS)
+MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D COMINISATPS $(MAXPRE) $(BIGWEIGHTS)
+MINISATP_PRF    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS $(MAXPRE) $(BIGWEIGHTS)
 MINISATP_FPIC   ?= -fpic
 
 # GNU Standard Install Variables
@@ -34,20 +34,29 @@ mandir      ?= $(datarootdir)/man
 # Dependencies
 MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat -I../cominisatps
 MINISAT_LIB    ?=-L$(libdir) -L../cominisatps/simp -l_release
+MCL_INCLUDE    ?=-I../maxpre/src
+MCL_LIB        ?=-L../maxpre/src/lib -lmaxpre
 
 ## Write Configuration  ###########################################################################
 
 config:
 	@( echo 'BUILD_DIR?=$(BUILD_DIR)'             ; \
+           echo 'MAXPRE?=-D MAXPRE'                   ; \
+           echo 'BIGWEIGHTS?=#-D BIG_WEIGHTS'         ; \
 	   echo 'MINISATP_RELSYM?=$(MINISATP_RELSYM)'           ; \
-	   echo 'MINISATP_REL?=$(MINISATP_REL)'                 ; \
-	   echo 'MINISATP_DEB?=$(MINISATP_DEB)'                 ; \
-	   echo 'MINISATP_PRF?=$(MINISATP_PRF)'                 ; \
+	   echo 'MINISATP_REL?=$(MINISATP_REL) $$(MAXPRE) $$(BIGWEIGHTS)' ; \
+	   echo 'MINISATP_DEB?=$(MINISATP_DEB) $$(MAXPRE) $$(BIGWEIGHTS)' ; \
+	   echo 'MINISATP_PRF?=$(MINISATP_PRF) $$(MAXPRE) $$(BIGWEIGHTS)' ; \
 	   echo 'MINISATP_FPIC?=$(MINISATP_FPIC)'               ; \
 	   echo 'MINISAT_INCLUDE?=$(MINISAT_INCLUDE)' ; \
 	   echo 'MINISAT_LIB?=$(MINISAT_LIB)'         ; \
+           echo 'ifneq ($$(MAXPRE),)'                  ; \
 	   echo 'MCL_INCLUDE?=$(MCL_INCLUDE)'         ; \
 	   echo 'MCL_LIB?=$(MCL_LIB)'                 ; \
+           echo 'else'                                ; \
+           echo 'MCL_INCLUDE?='                       ; \
+           echo 'MCL_LIB?='                           ; \
+           echo 'endif'                               ; \
 	   echo 'prefix?=$(prefix)'                   ) > config.mk
 
 ## Configurable options end #######################################################################

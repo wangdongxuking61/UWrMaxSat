@@ -1,6 +1,10 @@
 /*************************************************************************************[PbParser.cc]
 Copyright (c) 2005-2010, Niklas Een, Niklas Sorensson
 
+KP-MiniSat+ based on MiniSat+ -- Copyright (c) 2018-2020 Michał Karpiński, Marek Piotrów
+
+UWrMaxSat based on KP-MiniSat+ -- Copyright (c) 2019-2020 Marek Piotrów
+
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -20,7 +24,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "PbParser.h"
 #include "File.h"
 #include "Sort.h"
+#ifdef MAXPRE
 #include "preprocessorinterface.hpp"
+#endif
 
 //=================================================================================================
 // Parser buffers (streams):
@@ -326,6 +332,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
     int    gvars = 0;
     Int one = 1, weight;
 
+#ifdef MAXPRE
     extern bool opt_use_maxpre;
     extern char opt_maxpre_str[80];
     extern int  opt_maxpre_time;
@@ -333,23 +340,32 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
     extern maxPreprocessor::PreprocessorInterface *maxpre_ptr;
     std::vector<std::vector<int> > clauses;
     std::vector<uint64_t>  weights;
+#endif
 
     tmp.clear(); tmp.growTo(15,0);
     while (*in != EOF){
         weight = (wcnf_format ? parseInt(in) : 1);
+#ifdef MAXPRE
         if (opt_use_maxpre) clauses.push_back(std::vector<int>());
+#endif
         while (1) {
             bool negated = parseLit(in,tmp);
             if (tmp.size() == 2 && tmp[0] == '0') break;
+#ifdef MAXPRE
             int v = atoi(tmp);
             if (opt_use_maxpre) clauses.back().push_back(negated ? -v : v), ps.push(mkLit(v, negated));
-            else ps.push(mkLit(solver.getVar(tmp), negated));
+            else
+#endif
+                ps.push(mkLit(solver.getVar(tmp), negated));
         }
         skipEndOfLine(in);
+#ifdef MAXPRE
         if (opt_use_maxpre) {
             weights.push_back(tolong(weight));
             if (weight < hard_bound) solver.storeSoftClause(ps, tolong(weight));
-        } else if (weight >= hard_bound) {
+        } else 
+#endif
+        if (weight >= hard_bound) {
             if (!solver.addClause(ps)) return false;
         } else {
             gvars++;
@@ -364,6 +380,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         }
         ps.clear();
     }
+#ifdef MAXPRE
     if (opt_use_maxpre) {
         reportf("Using MaxPre - an MaxSAT preprocessor by Tuukka Korhonen (2017) with techniques: %s\n", 
                 opt_maxpre_str);
@@ -399,6 +416,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         }
         clauses.clear(); weights.clear();
     }
+#endif
     if (gvars == 0 && !opt_maxsat_msu) {
         tmp.clear(); tmp.growTo(15,0);
         sprintf(&tmp[0],"#%d",1);

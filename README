@@ -1,26 +1,40 @@
 ================================================================================
 Quick Install
 
-- clone the repository into uwrmaxsat:
+1. clone the repository into uwrmaxsat:
     git clone https://github.com/marekpiotrow/UWrMaxSat uwrmaxsat
     
-- get COMiniSatPSChandrasekharDRUP.zip from 
+2.1 get COMiniSatPSChandrasekharDRUP.zip from 
     wget https://baldur.iti.kit.edu/sat-competition-2016/solvers/main/COMiniSatPSChandrasekharDRUP.zip
-- unzip and move:
+2.2 unzip and move:
     unzip COMiniSatPSChandrasekharDRUP.zip
     mv 'COMiniSatPS Chandrasekhar DRUP/cominisatps' .
-- apply uwrmaxsat/cominisatps.patch:
+2.3 apply uwrmaxsat/cominisatps.patch:
     cd cominisatps
     patch -p1 <../uwrmaxsat/cominisatps.patch
-- compile the SAT solver library:
+2.4 compile the SAT solver library:
     cd simp
     MROOT=.. make libr
     cd .. ; ln -s . minisat ; cd ..
 
-- build the UWrMaxSat solver (release version, statically linked):
-  cd uwrmaxsat
-  make config
-  make r
+3.1 clone the MaxPre repository:
+    git clone https://github.com/Laakeri/maxpre
+3.2 compile it as a static library:
+    cd maxpre
+    sed -i 's/-g/-D NDEBUG/' src/Makefile
+    make lib
+    cd ..
+    
+4. build the UWrMaxSat solver (release version, statically linked):
+   cd uwrmaxsat
+   make config
+   make r
 
-- the executable file is: build/release/bin/uwrmaxsat
+Comments:
+   - the executable file is: build/release/bin/uwrmaxsat
 
+   - if you do not want to use MaxPre, skip the steps 3.1 and 3.2 and replace the last command in 4. with:
+   MAXPRE=  make r
+
+   - if you want to use unbounded weights in MaxSAT instances, remove # in config.mk in the first line 
+     containing BIGWEIGHTS before running the last command

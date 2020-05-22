@@ -1,8 +1,10 @@
 /*****************************************************************************************[Main.cc]
 
-UWrMaxSat:   Copyright (c) 2019, Marek Piotrów, based on:
-kp-minisatp: Copyright (c) 2017-2018, Michał Karpiński and Marek Piotrów, based on:
-Minisat+:    Copyright (c) 2005-2010, Niklas Een, Niklas Sorensson
+Minisat+ -- Copyright (c) 2005-2010, Niklas Een, Niklas Sorensson
+
+KP-MiniSat+ based on MiniSat+ -- Copyright (c) 2018-2020 Michał Karpiński, Marek Piotrów
+
+UWrMaxSat based on KP-MiniSat+ -- Copyright (c) 2019-2020 Marek Piotrów
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -34,7 +36,9 @@ Read a DIMACS file and apply the SAT-solver to it.
 #include "PbParser.h"
 #include "FEnv.h"
 
+#ifdef MAXPRE
 #include "preprocessorinterface.hpp"
+#endif
 
 //=================================================================================================
 // Command line options:
@@ -75,14 +79,16 @@ bool     opt_lexicographic = false;
 bool     opt_to_bin_search = true;
 bool     opt_maxsat_prepr  = true;
 bool     opt_use_maxpre    = false;
+#ifdef MAXPRE
 char     opt_maxpre_str[80]= "[bu]#[buvsrgc]";
 int      opt_maxpre_time   = 0;
 int      opt_maxpre_skip   = 0;
 
+maxPreprocessor::PreprocessorInterface *maxpre_ptr = NULL;
+#endif
+
 char*    opt_input  = NULL;
 char*    opt_result = NULL;
-
-maxPreprocessor::PreprocessorInterface *maxpre_ptr = NULL;
 
 // -- statistics;
 unsigned long long int srtEncodings = 0, addEncodings = 0, bddEncodings = 0;
@@ -92,7 +98,7 @@ unsigned long long int srtOptEncodings = 0, addOptEncodings = 0, bddOptEncodings
 
 cchar* doc =
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
-    "UWrMaxSat 1.0 -- University of Wrocław MaxSAT solver by Marek Piotrów (2019)\n" 
+    "UWrMaxSat 1.1 -- University of Wrocław MaxSAT solver by Marek Piotrów (2019-2020)\n" 
     "and PB solver by Marek Piotrów and Michał Karpiński (2018) -- an extension of\n"
     "MiniSat+ 1.1, based on MiniSat 2.2.0  -- (C) Niklas Een, Niklas Sorensson (2012)\n"
     "with COMiniSatPS by Chanseok Oh (2016) as the SAT solver\n"
@@ -146,12 +152,14 @@ cchar* doc =
     "  -lex-opt      Do Boolean lexicographic optimizations on soft clauses.\n"
     "  -no-bin       Do not switch from UNSAT to SAT/UNSAT search strategy.\n"
     "  -no-ms-pre    Do not preprocess soft clauses (detect unit/am1 cores).\n"
+#ifdef MAXPRE
     "\n"
     "MaxPre (an extended MaxSAT preprocessor by Korhonen) specific options:\n"
     "  -maxpre       Use MaxPre with the default techniques and no skip and no time limit.\n"
     "  -maxpre=      MaxPre technique selection string. [def: \"%s\"]\n"
     "  -maxpre-skip= MaxPre skip ineffective technique after given tries (between 10 and 1000).\n"
     "  -maxpre-time= MaxPre time limit in seconds for preprocessing (0 - no limit).\n"
+#endif
     "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
 ;
 
@@ -187,7 +195,11 @@ void parseOptions(int argc, char** argv)
         if (arg[0] == '-'){
             if (oneof(arg,"h,help")) 
                 fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, 
-                        opt_base_max, opt_unsat_cpu, opt_maxpre_str), exit(0);
+                        opt_base_max, opt_unsat_cpu
+#ifdef MAXPRE
+                        , opt_maxpre_str
+#endif
+                        ), exit(0);
 
             else if (oneof(arg, "ca,adders" )) opt_convert = ct_Adders;
             else if (oneof(arg, "cs,sorters")) opt_convert = ct_Sorters;
@@ -233,8 +245,9 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "lex-opt"   )) opt_lexicographic = true;
             else if (oneof(arg, "no-bin"    )) opt_to_bin_search = false;
             else if (oneof(arg, "no-ms-pre" )) opt_maxsat_prepr = false;
+#ifdef MAXPRE
             else if (oneof(arg, "maxpre" ))    opt_use_maxpre = true;
-
+#endif
             else if (oneof(arg, "s,satlive" )) opt_satlive = false;
             else if (oneof(arg, "a,ansi"    )) opt_ansi    = false;
             else if (oneof(arg, "try"       )) opt_try     = true;
@@ -246,12 +259,17 @@ void parseOptions(int argc, char** argv)
             }
             else if (strncmp(arg, "-cpu-lim=",  9) == 0) opt_cpu_lim  = atoi(arg+9);
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
+#ifdef MAXPRE
             else if (strncmp(arg, "-maxpre=",   8) == 0) 
                 opt_use_maxpre = true, strncpy(opt_maxpre_str,arg+8,sizeof(opt_maxpre_str));
             else if (strncmp(arg, "-maxpre-skip=", 13) == 0) 
                 opt_use_maxpre = true, opt_maxpre_skip  = atoi(arg+13);
             else if (strncmp(arg, "-maxpre-time=", 13) == 0) 
                 opt_use_maxpre = true, opt_maxpre_time  = atoi(arg+13);
+#else
+            else if (strncmp(arg, "-maxpre",   7)==0 || strncmp(arg, "-maxpre-skip", 12)==0 || strncmp(arg, "-maxpre-time", 12)==0)
+                fprintf(stderr, "ERROR! MaxPre is not available: invalid command line option: %s\n", argv[i]), exit(1);
+#endif
             else if (strncmp(arg, "-top=", 5) == 0) 
                 opt_minimization = 1, opt_maxsat_msu = true, opt_to_bin_search = false, 
                 opt_output_top  = atoi(arg+5);
@@ -264,7 +282,11 @@ void parseOptions(int argc, char** argv)
 
     if (args.size() == 0)
         fprintf(stderr, doc, opt_bdd_thres, opt_sort_thres, opt_goal_bias, opt_base_max, 
-                        opt_base_max, opt_unsat_cpu, opt_maxpre_str), exit(0);
+                        opt_base_max, opt_unsat_cpu
+#ifdef MAXPRE
+                        , opt_maxpre_str
+#endif
+                        ), exit(0);
     if (args.size() >= 1)
         opt_input = args[0];
     if (args.size() == 2)
@@ -318,6 +340,7 @@ void outputResult(const PbSolver& S, bool optimum)
     if (!opt_satlive || resultsPrinted) return;
 
     if (opt_model_out && S.best_goalvalue != Int_MAX){
+#ifdef MAXPRE
         if (opt_use_maxpre) {
             std::vector<int> trueLiterals, model;
             for (int i = 0; i < S.best_model.size(); i++)
@@ -347,7 +370,9 @@ void outputResult(const PbSolver& S, bool optimum)
                 for (unsigned i = 0; i < model.size(); i++)
                     printf(" %d", model[i]);
             }
-        } else if (opt_bin_model_out) {
+        } else
+#endif
+        if (opt_bin_model_out) {
             printf("v ");
             for (int i = 0; i < S.declared_n_vars; i++)
                 putchar(S.best_model[i]? '1' : '0');
@@ -379,6 +404,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
     static int lst = 0;
     if (!opt_satlive || resultsPrinted || opt_output_top >= 0) return;
     if (opt_model_out && S.best_goalvalue != Int_MAX){
+#ifdef MAXPRE
         if (opt_use_maxpre) {
             std::vector<int> trueLiterals, model;
             for (int i = 0; i < S.best_model.size(); i++)
@@ -418,7 +444,9 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
                 for (char *last = buf+lst-1; first < last; first++, last--) { 
                     char c = *first; *first = *last; *last = c; }
             }
-        } else {
+        } else
+#endif
+        {
             buf[0] = '\n'; buf[1] = 'v'; lst += 2;
             for (int i = 0; i < S.best_model.size(); i++)
                 if (S.index2name[i][0] != '#') {
