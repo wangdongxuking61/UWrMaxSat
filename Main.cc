@@ -50,6 +50,7 @@ char*    opt_cnf       = NULL;
 int      opt_verbosity = 1;
 bool     opt_model_out = true;
 bool     opt_bin_model_out = false;
+bool     opt_satisfiable_out = true;
 bool     opt_try       = false;     // (hidden option -- if set, then "try" to parse, but don't output "s UNKNOWN" if you fail, instead exit with error code 5)
 int      opt_output_top    = -1;
 
@@ -74,7 +75,7 @@ int      opt_minimization  = -1; // -1 = to be set, 0 = sequential. 1 = alternat
 int      opt_seq_thres     = 96;
 int      opt_bin_percent   = 65;
 bool     opt_maxsat_msu    = true;
-double   opt_unsat_cpu     = 1200; // in seconds
+double   opt_unsat_cpu     = 500; // in seconds
 bool     opt_lexicographic = false;
 bool     opt_to_bin_search = true;
 bool     opt_maxsat_prepr  = true;
@@ -216,6 +217,7 @@ void parseOptions(int argc, char** argv)
             else if (oneof(arg, "nm,no-model" ))    opt_model_out = opt_bin_model_out = false;
             else if (oneof(arg, "bm,bin-model" ))   opt_model_out = opt_bin_model_out = true;
             else if (oneof(arg, "no-msu" ))         opt_maxsat_msu   = false;
+            else if (oneof(arg, "no-sat" ))         opt_satisfiable_out   = false;
 
             //(make nicer later)
             else if (strncmp(arg, "-bdd-thres=" , 11) == 0) opt_bdd_thres  = atof(arg+11);
@@ -372,17 +374,19 @@ void outputResult(const PbSolver& S, bool optimum)
             }
         } else
 #endif
-        if (opt_bin_model_out) {
-            printf("v ");
-            for (int i = 0; i < S.declared_n_vars; i++)
-                putchar(S.best_model[i]? '1' : '0');
-        } else {
-            printf("v");
-            for (int i = 0; i < S.best_model.size(); i++)
-                if (S.index2name[i][0] != '#')
-                    printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
+        if (optimum || opt_satisfiable_out) {
+            if (opt_bin_model_out) {
+                printf("v ");
+                for (int i = 0; i < S.declared_n_vars; i++)
+                    putchar(S.best_model[i]? '1' : '0');
+            } else {
+                printf("v");
+                for (int i = 0; i < S.best_model.size(); i++)
+                    if (S.index2name[i][0] != '#')
+                        printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
     }
     if (opt_output_top < 0) {
         if (optimum){
@@ -390,7 +394,7 @@ void outputResult(const PbSolver& S, bool optimum)
             else                             printf("s OPTIMUM FOUND\n");
         }else{
             if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
-            else                             printf("s SATISFIABLE\n");
+            else                             printf("%c SATISFIABLE\n", (opt_satisfiable_out ? 's' : 'c'));
         }
         resultsPrinted = true;
     } else if (opt_output_top == 1) resultsPrinted = true;
@@ -410,7 +414,7 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
             for (int i = 0; i < S.best_model.size(); i++)
                 trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
             model = maxpre_ptr->reconstruct(trueLiterals);
-            if (!optimum) {
+            if (!optimum && opt_satisfiable_out) {
                 Int sum = 0;
                 vec<bool> bmodel( abs(model.back()) + 1);
                 for (int i = model.size() - 1; i >= 0; i--) bmodel[abs(model[i])] = (model[i] > 0);
@@ -432,45 +436,56 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
                     }
                 }
             }
-            buf[lst++] = '\n'; buf[lst++] = 'v';
-            for (unsigned i = 0; i < model.size(); i++) {
-                if (lst + 15 >= BUF_SIZE) { 
-                    buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
-                }
-                buf[lst++] = ' ';
-                if (model[i] < 0) { buf[lst++] = '-'; model[i] = -model[i]; }
-                char *first = buf + lst;
-                for (int v = model[i]; v > 0; v /= 10) buf[lst++] = '0' + v%10;
-                for (char *last = buf+lst-1; first < last; first++, last--) { 
-                    char c = *first; *first = *last; *last = c; }
-            }
-        } else
-#endif
-        {
-            buf[0] = '\n'; buf[1] = 'v'; lst += 2;
-            for (int i = 0; i < S.best_model.size(); i++)
-                if (S.index2name[i][0] != '#') {
-                    int sz = strlen(S.index2name[i]);
-                    if (lst + sz + 2 >= BUF_SIZE) { 
+            if (optimum || opt_satisfiable_out) {
+                buf[lst++] = '\n'; buf[lst++] = 'v';
+                for (unsigned i = 0; i < model.size(); i++) {
+                    if (lst + 15 >= BUF_SIZE) { 
                         buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
                     }
                     buf[lst++] = ' ';
-                    if (!S.best_model[i]) buf[lst++] = '-';
-                    strcpy(buf+lst,S.index2name[i]); lst += sz;
+                    if (model[i] < 0) { buf[lst++] = '-'; model[i] = -model[i]; }
+                    char *first = buf + lst;
+                    for (int v = model[i]; v > 0; v /= 10) buf[lst++] = '0' + v%10;
+                    for (char *last = buf+lst-1; first < last; first++, last--) { 
+                        char c = *first; *first = *last; *last = c; }
                 }
+            }
+        } else
+#endif
+        if (optimum || opt_satisfiable_out) {
+            buf[0] = '\n'; buf[1] = 'v'; lst += 2;
+            if (opt_bin_model_out)
+                for (int i = 0; i < S.declared_n_vars; i++) {
+                    if (lst + 3 >= BUF_SIZE) { 
+                        buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                    }
+                    buf[lst++] = (S.best_model[i]? '1' : '0');
+                }
+            else
+                for (int i = 0; i < S.best_model.size(); i++)
+                    if (S.index2name[i][0] != '#') {
+                        int sz = strlen(S.index2name[i]);
+                        if (lst + sz + 2 >= BUF_SIZE) { 
+                            buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                        }
+                        buf[lst++] = ' ';
+                        if (!S.best_model[i]) buf[lst++] = '-';
+                        strcpy(buf+lst,S.index2name[i]); lst += sz;
+                    }
         }
         buf[lst++] = '\n';
         if (lst + 20 >= BUF_SIZE) { lst = write(1, buf, lst); lst = 0; }
     }
-    const char *out;
+    const char *out = NULL;
     if (optimum){
         if (S.best_goalvalue == Int_MAX) out = "s UNSATISFIABLE\n";
         else                             out = "s OPTIMUM FOUND\n";
     }else{
         if (S.best_goalvalue == Int_MAX) out = "s UNKNOWN\n";
-        else                             out = "s SATISFIABLE\n";
+        else if (opt_satisfiable_out)    out = "s SATISFIABLE\n";
+        else                             out = "c SATISFIABLE\n";
     }
-    strcpy(buf + lst, out); lst += strlen(out);
+    if (out != NULL) strcpy(buf + lst, out), lst += strlen(out);
     lst = write(1, buf, lst); lst = 0;
     resultsPrinted = true;
 }

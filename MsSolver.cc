@@ -534,13 +534,15 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 if (soft_cls[i].snd->size() > 1)
                     model[var(soft_cls[i].snd->last())] = !sign(soft_cls[i].snd->last());
             Int goalvalue = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
+            extern bool opt_satisfiable_out;
             if (goalvalue < best_goalvalue) {
                 best_goalvalue = goalvalue;
                 model.moveTo(best_model);
                 char* tmp = toString(best_goalvalue * goal_gcd);
-                if (opt_output_top < 0 && (opt_satlive || opt_verbosity == 0))
+                if (opt_satisfiable_out && opt_output_top < 0 && (opt_satlive || opt_verbosity == 0))
                     printf("o %s\n", tmp), fflush(stdout);
-                else if (opt_verbosity > 0) reportf("%s solution: %s\n", (optimum_found ? "Next" : "Found"), tmp);
+                else if (opt_verbosity > 0 || !opt_satisfiable_out) 
+                    reportf("%s solution: %s\n", (optimum_found ? "Next" : "Found"), tmp);
                 xfree(tmp);
             } else model.clear(); 
             if (best_goalvalue < UB_goalvalue && opt_output_top < 0) UB_goalvalue = best_goalvalue;
@@ -575,7 +577,12 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                             }
                         continue;
                     }
-                } else break;
+                } else {
+                    char* tmp = toString(best_goalvalue * goal_gcd);
+                    if (!opt_satisfiable_out) printf("o %s\n", tmp), fflush(stdout);
+                    xfree(tmp);
+                    break;
+                }
             if (opt_minimization == 1) {
                 assert(sorted_assump_Cs.size() > 0 || !delayed_assump.empty()); 
                 int old_top = top_for_strat;

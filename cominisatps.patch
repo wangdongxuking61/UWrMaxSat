@@ -1,6 +1,6 @@
 diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
 --- cominisatps-SAT2016/core/Solver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.cc	2019-03-06 11:52:39.158184887 +0100
++++ cominisatps/core/Solver.cc	2020-05-22 12:12:13.549838808 +0200
 @@ -150,6 +150,7 @@
      trail    .capacity(v+1);
      setDecisionVar(v, dvar);
@@ -9,67 +9,46 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
      // Additional space needed for stamping.
      // TODO: allocate exact memory.
      seen      .push(0);
-@@ -589,6 +590,55 @@
-     trail.push_(p);
+@@ -550,16 +551,20 @@
+ |    Specialized analysis procedure to express the final conflict in terms of assumptions.
+ |    Calculates the (possibly empty) set of assumptions that led to the assignment of 'p', and
+ |    stores the result in 'out_conflict'.
++|
++|  void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
+ |________________________________________________________________________________________________@*/
+-void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
++void Solver::analyzeFinal(CRef confl, vec<Lit>& out_conflict)
+ {
+     out_conflict.clear();
+-    out_conflict.push(p);
+ 
+     if (decisionLevel() == 0)
+         return;
+ 
+-    seen[var(p)] = 1;
++    Clause& cl = ca[confl];
++    for (int j = 0; j < cl.size(); j++)
++        if (level(var(cl[j])) > 0)
++            seen[var(cl[j])] = 1;
+ 
+     for (int i = trail.size()-1; i >= trail_lim[0]; i--){
+         Var x = var(trail[i]);
+@@ -577,7 +582,9 @@
+         }
+     }
+ 
+-    seen[var(p)] = 0;
++    for (int j = cl.size() == 2 ? 0 : 1; j < cl.size(); j++)
++        if (level(var(cl[j])) > 0)
++            seen[var(cl[j])] = 0;
  }
  
-+//=================================================================================================
-+// Propagate and check:
-+bool Solver::prop_check(const vec<Lit>& assumps, vec<Lit>& prop, int psaving)
-+{
-+    prop.clear();
-+
-+    if (!ok)
-+        return false;
-+
-+    bool    st = true;
-+    int  level = decisionLevel();
-+    CRef confl = CRef_Undef;
-+
-+    // dealing with phase saving
-+    int psaving_copy = phase_saving;
-+    phase_saving = psaving;
-+
-+    // propagate each assumption at a new decision level
-+    for (int i = 0; st && confl == CRef_Undef && i < assumps.size(); ++i) {
-+        Lit p = assumps[i];
-+
-+        if (value(p) == l_False)
-+            st = false;
-+        else if (value(p) != l_True) {
-+            newDecisionLevel ();
-+            uncheckedEnqueue(p);
-+            confl = propagate();
-+        }
-+    }
-+
-+    // copying the result
-+    if (decisionLevel() > level) {
-+        for (int c = trail_lim[level]; c < trail.size(); ++c)
-+            prop.push(trail[c]);
-+
-+        // if there is a conflict, pushing
-+        // the conflicting literal as well
-+        if (confl != CRef_Undef)
-+            prop.push(ca[confl][0]);
-+
-+        // backtracking
-+        cancelUntil(level);
-+    }
-+
-+    // restoring phase saving
-+    phase_saving = psaving_copy;
-+
-+    return st && confl == CRef_Undef;
-+}
  
- /*_________________________________________________________________________________________________
- |
-@@ -650,12 +700,22 @@
+@@ -650,12 +656,22 @@
                  *j++ = w; continue; }
  
              // Look for new watch:
-+            int choosenPos = -1;
++            int choosenPos = -1, maxAssumpLevel = assumptions.size() > 0 ? 1 : 0;
              for (int k = 2; k < c.size(); k++)
                  if (value(c[k]) != l_False){
 -                    c[1] = c[k]; c[k] = false_lit;
@@ -77,7 +56,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
 -                    goto NextClause; }
 -
 +                    choosenPos = k;
-+                    if(decisionLevel()>assumptions.size() || value(c[k])==l_True || !assump[var(c[k])]) 
++                    if(decisionLevel()>maxAssumpLevel || value(c[k])==l_True || !assump[var(c[k])]) 
 +                        break; }
 +            if(choosenPos!=-1) {
 +                c[1] = c[choosenPos]; c[choosenPos] = false_lit;
@@ -92,7 +71,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
              // Did not find watch -- clause is unit under assignment:
              *j++ = w;
              if (value(first) == l_False){
-@@ -789,7 +848,8 @@
+@@ -789,7 +804,8 @@
          ok = stampAll(true);
  
      checkGarbage();
@@ -102,7 +81,15 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  
      simpDB_assigns = nAssigns();
      simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
-@@ -998,7 +1058,7 @@
+@@ -933,6 +949,7 @@
+             conflicts++; nof_conflicts--;
+             if (conflicts == 100000 && learnts_core.size() < 100) core_lbd_cut = 5;
+             if (decisionLevel() == 0) return l_False;
++            if (decisionLevel() == 1) { analyzeFinal(confl, conflict); return l_False; }
+ 
+             learnt_clause.clear();
+             analyze(confl, learnt_clause, backtrack_level, lbd);
+@@ -998,7 +1015,7 @@
                  restart = lbd_queue.full() && (lbd_queue.avg() * K > global_lbd_sum / conflicts_glue);
                  cached = true;
              }
@@ -111,17 +98,31 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
                  lbd_queue.clear();
                  // Reached bound on number of conflicts:
                  progress_estimate = progressEstimate();
-@@ -1017,7 +1077,7 @@
+@@ -1017,22 +1034,18 @@
                  reduceDB(); }
  
              Lit next = lit_Undef;
 -            /*while (decisionLevel() < assumptions.size()){
-+            while (decisionLevel() < assumptions.size()){
-                 // Perform user provided assumption:
-                 Lit p = assumptions[decisionLevel()];
-                 if (value(p) == l_True){
-@@ -1032,7 +1092,7 @@
+-                // Perform user provided assumption:
+-                Lit p = assumptions[decisionLevel()];
+-                if (value(p) == l_True){
+-                    // Dummy decision level:
+-                    newDecisionLevel();
+-                }else if (value(p) == l_False){
+-                    analyzeFinal(~p, conflict);
+-                    return l_False;
+-                }else{
+-                    next = p;
+-                    break;
++
++            if (decisionLevel() == 0) {
++                newDecisionLevel();
++                for (int i = 0; i < assumptions.size(); i++) {
++                    Lit p = assumptions[i];
++                    if (value(p) == l_False) { conflict.push(~p); return l_False; }
++                    else if (value(p) != l_True) uncheckedEnqueue(p);
                  }
++                continue;
              }
  
 -            if (next == lit_Undef)*/{
@@ -129,7 +130,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
                  // New variable decision:
                  decisions++;
                  next = pickBranchLit();
-@@ -1101,25 +1161,23 @@
+@@ -1101,25 +1114,23 @@
  
      solves++;
  
@@ -162,7 +163,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  
      // Search:
      int phase_allotment = 100;
-@@ -1127,9 +1185,9 @@
+@@ -1127,9 +1138,9 @@
          int weighted = glucose_restart ? phase_allotment * 2 : phase_allotment;
          fflush(stdout);
  
@@ -174,7 +175,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
              break; // Should break here for correctness in incremental SAT solving.
  
          glucose_restart = !glucose_restart;
-@@ -1137,9 +1195,6 @@
+@@ -1137,9 +1148,6 @@
              phase_allotment += phase_allotment / 10;
      }
  
@@ -186,16 +187,8 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  #endif
 diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
 --- cominisatps-SAT2016/core/Solver.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.h	2019-03-06 11:48:07.642184857 +0100
-@@ -108,6 +108,7 @@
-     bool    solve        (Lit p, Lit q);            // Search for a model that respects two assumptions.
-     bool    solve        (Lit p, Lit q, Lit r);     // Search for a model that respects three assumptions.
-     bool    okay         () const;                  // FALSE means solver is in a conflicting state
-+    bool    prop_check   (const vec<Lit>& assumps, vec<Lit>& prop, int psaving = 0); // compute a list of propagated literals given a set of assumptions
- 
-     void    toDimacs     (FILE* f, const vec<Lit>& assumps);            // Write CNF to file in DIMACS-format.
-     void    toDimacs     (const char *file, const vec<Lit>& assumps);
-@@ -228,6 +229,7 @@
++++ cominisatps/core/Solver.h	2020-05-15 13:03:07.461337927 +0200
+@@ -228,6 +228,7 @@
      OccLists<Lit, vec<Watcher>, WatcherDeleted>
                          watches_bin,      // Watches for binary clauses only.
                          watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
@@ -203,9 +196,18 @@ diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
      vec<lbool>          assigns;          // The current assignments.
      vec<char>           polarity;         // The preferred polarity of each variable.
      vec<char>           decision;         // Declares if a variable is eligible for selection in the decision heuristic.
+@@ -284,7 +285,7 @@
+     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
+     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
+     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd);    // (bt = backtrack)
+-    void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
++    void     analyzeFinal(CRef confl, vec<Lit>& out_conflict);
+     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
+     lbool    search           (int& nof_conflicts);                                    // Search for a given number of conflicts.
+     lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
 diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
 --- cominisatps-SAT2016/mtl/template.mk	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/mtl/template.mk	2019-05-16 08:14:06.794323553 +0200
++++ cominisatps/mtl/template.mk	2019-12-20 11:21:39.252626781 +0100
 @@ -44,7 +44,7 @@
  %.o:			CFLAGS +=$(COPTIMIZE) -g -D DEBUG
  %.op:			CFLAGS +=$(COPTIMIZE) -pg -g -D NDEBUG
@@ -217,7 +219,7 @@ diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
  $(EXEC):		LFLAGS += -g
 diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
 --- cominisatps-SAT2016/simp/SimpSolver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/simp/SimpSolver.cc	2019-04-04 14:34:05.731478845 +0200
++++ cominisatps/simp/SimpSolver.cc	2019-08-22 15:35:41.645730910 +0200
 @@ -636,6 +636,7 @@
      int iter = 0;
      int n_cls, n_cls_init, n_vars;
