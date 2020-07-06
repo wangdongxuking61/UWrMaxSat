@@ -391,7 +391,14 @@ void outputResult(const PbSolver& S, bool optimum)
     if (opt_output_top < 0) {
         if (optimum){
             if (S.best_goalvalue == Int_MAX) printf("s UNSATISFIABLE\n");
-            else                             printf("s OPTIMUM FOUND\n");
+            else {
+                if (!opt_satisfiable_out) {
+                    char* tmp = toString(S.best_goalvalue);
+                    printf("o %s\n", tmp);
+                    xfree(tmp);
+                }
+                printf("s OPTIMUM FOUND\n");
+            }
         }else{
             if (S.best_goalvalue == Int_MAX) printf("s UNKNOWN\n");
             else                             printf("%c SATISFIABLE\n", (opt_satisfiable_out ? 's' : 'c'));

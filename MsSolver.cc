@@ -577,12 +577,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                             }
                         continue;
                     }
-                } else {
-                    char* tmp = toString(best_goalvalue * goal_gcd);
-                    if (!opt_satisfiable_out) printf("o %s\n", tmp), fflush(stdout);
-                    xfree(tmp);
-                    break;
-                }
+                } else break;
             if (opt_minimization == 1) {
                 assert(sorted_assump_Cs.size() > 0 || !delayed_assump.empty()); 
                 int old_top = top_for_strat;
