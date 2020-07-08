@@ -330,8 +330,12 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     }
 
     // Freeze goal function variables (for SatELite):
-    for (int i = 0; i < soft_cls.size(); i++)
+    for (int i = 0; i < soft_cls.size(); i++) {
         sat_solver.setFrozen(var(soft_cls[i].snd->last()), true);
+        if (opt_output_top > 0)
+            for (int j = soft_cls[i].snd->size() - 2; j >= 0; j--) 
+                sat_solver.setFrozen(var((*soft_cls[i].snd)[j]), true);
+    }
     sat_solver.verbosity = opt_verbosity - 1;
 
     goal_gcd = soft_cls[0].fst;
@@ -535,7 +539,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                     model[var(soft_cls[i].snd->last())] = !sign(soft_cls[i].snd->last());
             Int goalvalue = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
             extern bool opt_satisfiable_out;
-            if (goalvalue < best_goalvalue) {
+            if (goalvalue < best_goalvalue || opt_output_top > 0 && goalvalue == best_goalvalue) {
                 best_goalvalue = goalvalue;
                 model.moveTo(best_model);
                 char* tmp = toString(best_goalvalue * goal_gcd);
