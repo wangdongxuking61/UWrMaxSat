@@ -176,8 +176,7 @@ macro int irand(double& seed, int size) {
 //=================================================================================================
 // Time:
 
-
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__MINGW32__)
 #include <ctime>
 macro double cpuTime(void) {
     return (double)clock() / CLOCKS_PER_SEC; }

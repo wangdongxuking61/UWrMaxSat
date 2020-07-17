@@ -536,6 +536,7 @@ static void increase_stack_size(int new_size) // M. Piotrow 16.10.2017
       reportf("Setting stack limit to %dMB.\n",new_size);
   }
 #else
+  (void) new_size;
   reportf("WARNING! Setting stack limit not supported on this architecture.\n");
 #endif
 }
@@ -571,7 +572,9 @@ int main(int argc, char** argv)
 
     if (opt_cpu_lim != INT32_MAX) {
         reportf("Setting cpu limit to %ds.\n",opt_cpu_lim);
-        signal(SIGXCPU, SIGTERM_handler); 
+#ifdef SIGXCPU	
+        signal(SIGXCPU, SIGTERM_handler);
+#endif	
         limitTime(opt_cpu_lim);
     }
     if (opt_mem_lim != INT32_MAX) {

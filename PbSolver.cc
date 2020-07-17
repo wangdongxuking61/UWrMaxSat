@@ -588,7 +588,9 @@ void PbSolver::solve(solve_Command cmd)
 
     pb_solver = this;
     signal(SIGINT, SIGINT_interrupt);
+#ifdef SIGXCPU
     signal(SIGXCPU,SIGINT_interrupt);
+#endif
 
     bool    sat = false;
     Minisat::vec<Lit> assump_ps;

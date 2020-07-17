@@ -24,7 +24,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 char* vnsprintf(const char* format, va_list args)
 {
-    static FILE* dummy = fopen("/dev/null", "wb");
     unsigned     chars_written;
     char*        ret;
     va_list      args_copy;
@@ -34,11 +33,11 @@ char* vnsprintf(const char* format, va_list args)
   #else
     args_copy = args;
   #endif
-    chars_written = vfprintf(dummy, format, args);
+    chars_written = vsnprintf(NULL, 0, format, args);
     ret = xmalloc<char>(chars_written + 1);
     ret[chars_written] = 255;
     args = args_copy;
-    vsprintf(ret, format, args);
+    vsnprintf(ret, chars_written+1, format, args);
     assert(ret[chars_written] == 0);
     return ret;
 }

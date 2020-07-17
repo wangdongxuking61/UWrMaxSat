@@ -60,7 +60,11 @@ static MsSolver *pb_solver;
 static
 void SIGINT_interrupt(int signum) { 
     pb_solver->sat_solver.interrupt(); pb_solver->asynch_interrupt=true; 
+#ifdef SIGXCPU    
     pb_solver->cpu_interrupt = (signum == SIGXCPU);
+#else
+    pb_solver->cpu_interrupt = false;
+#endif
 }
 
 extern int verbosity;
@@ -359,7 +363,9 @@ void MsSolver::maxsat_solve(solve_Command cmd)
 
     pb_solver = this;
     signal(SIGINT, SIGINT_interrupt);
+#ifdef SIGXCPU
     signal(SIGXCPU,SIGINT_interrupt);
+#endif
 
     Map<int,int> assump_map(-1);
     vec<Linear*> saved_constrs;

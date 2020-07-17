@@ -1,6 +1,6 @@
 diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
 --- cominisatps-SAT2016/core/Solver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.cc	2020-05-22 12:12:13.549838808 +0200
++++ cominisatps/core/Solver.cc	2020-07-15 11:33:09.184216400 +0200
 @@ -150,6 +150,7 @@
      trail    .capacity(v+1);
      setDecisionVar(v, dvar);
@@ -44,7 +44,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  }
  
  
-@@ -650,12 +656,22 @@
+@@ -650,12 +657,22 @@
                  *j++ = w; continue; }
  
              // Look for new watch:
@@ -71,7 +71,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
              // Did not find watch -- clause is unit under assignment:
              *j++ = w;
              if (value(first) == l_False){
-@@ -789,7 +804,8 @@
+@@ -789,7 +806,8 @@
          ok = stampAll(true);
  
      checkGarbage();
@@ -81,7 +81,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  
      simpDB_assigns = nAssigns();
      simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
-@@ -933,6 +949,7 @@
+@@ -933,6 +951,7 @@
              conflicts++; nof_conflicts--;
              if (conflicts == 100000 && learnts_core.size() < 100) core_lbd_cut = 5;
              if (decisionLevel() == 0) return l_False;
@@ -89,7 +89,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  
              learnt_clause.clear();
              analyze(confl, learnt_clause, backtrack_level, lbd);
-@@ -998,7 +1015,7 @@
+@@ -998,7 +1017,7 @@
                  restart = lbd_queue.full() && (lbd_queue.avg() * K > global_lbd_sum / conflicts_glue);
                  cached = true;
              }
@@ -98,7 +98,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
                  lbd_queue.clear();
                  // Reached bound on number of conflicts:
                  progress_estimate = progressEstimate();
-@@ -1017,22 +1034,18 @@
+@@ -1017,22 +1036,18 @@
                  reduceDB(); }
  
              Lit next = lit_Undef;
@@ -130,7 +130,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
                  // New variable decision:
                  decisions++;
                  next = pickBranchLit();
-@@ -1101,25 +1114,23 @@
+@@ -1101,25 +1116,23 @@
  
      solves++;
  
@@ -163,7 +163,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  
      // Search:
      int phase_allotment = 100;
-@@ -1127,9 +1138,9 @@
+@@ -1127,9 +1140,9 @@
          int weighted = glucose_restart ? phase_allotment * 2 : phase_allotment;
          fflush(stdout);
  
@@ -175,7 +175,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
              break; // Should break here for correctness in incremental SAT solving.
  
          glucose_restart = !glucose_restart;
-@@ -1137,9 +1148,6 @@
+@@ -1137,9 +1150,6 @@
              phase_allotment += phase_allotment / 10;
      }
  
@@ -187,7 +187,16 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  #endif
 diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
 --- cominisatps-SAT2016/core/Solver.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.h	2020-05-15 13:03:07.461337927 +0200
++++ cominisatps/core/Solver.h	2020-07-16 11:08:42.659543400 +0200
+@@ -23,7 +23,7 @@
+ #ifndef Minisat_Solver_h
+ #define Minisat_Solver_h
+ 
+-#define BIN_DRUP
++//#define BIN_DRUP
+ 
+ #define GLUCOSE23
+ //#define EXTRA_VAR_ACT_BUMP
 @@ -228,6 +228,7 @@
      OccLists<Lit, vec<Watcher>, WatcherDeleted>
                          watches_bin,      // Watches for binary clauses only.
@@ -205,9 +214,30 @@ diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
      bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
      lbool    search           (int& nof_conflicts);                                    // Search for a given number of conflicts.
      lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
+diff -urB cominisatps-SAT2016/core/SolverTypes.h cominisatps/core/SolverTypes.h
+--- cominisatps-SAT2016/core/SolverTypes.h	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/core/SolverTypes.h	2020-07-16 10:52:23.165440700 +0200
+@@ -49,7 +49,7 @@
+     int     x;
+ 
+     // Use this as a constructor:
+-    friend Lit mkLit(Var var, bool sign = false);
++    //friend Lit mkLit(Var var, bool sign = false);
+ 
+     bool operator == (Lit p) const { return x == p.x; }
+     bool operator != (Lit p) const { return x != p.x; }
+@@ -57,7 +57,7 @@
+ };
+ 
+ 
+-inline  Lit  mkLit     (Var var, bool sign) { Lit p; p.x = var + var + (int)sign; return p; }
++inline  Lit  mkLit     (Var var, bool sign = false) { Lit p; p.x = var + var + (int)sign; return p; }
+ inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
+ inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
+ inline  bool sign      (Lit p)              { return p.x & 1; }
 diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
 --- cominisatps-SAT2016/mtl/template.mk	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/mtl/template.mk	2019-12-20 11:21:39.252626781 +0100
++++ cominisatps/mtl/template.mk	2020-07-15 11:33:09.206343900 +0200
 @@ -44,7 +44,7 @@
  %.o:			CFLAGS +=$(COPTIMIZE) -g -D DEBUG
  %.op:			CFLAGS +=$(COPTIMIZE) -pg -g -D NDEBUG
@@ -217,9 +247,84 @@ diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
  
  ## Link options
  $(EXEC):		LFLAGS += -g
+diff -urB cominisatps-SAT2016/simp/Main.cc cominisatps/simp/Main.cc
+--- cominisatps-SAT2016/simp/Main.cc	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/simp/Main.cc	2020-07-16 11:42:56.858959200 +0200
+@@ -24,7 +24,7 @@
+ 
+ #include <signal.h>
+ #include <zlib.h>
+-#include <sys/resource.h>
++//#include <sys/resource.h>
+ 
+ #include "utils/System.h"
+ #include "utils/ParseUtils.h"
+@@ -41,11 +41,11 @@
+ {
+     double cpu_time = cpuTime();
+     double mem_used = memUsedPeak();
+-    printf("c restarts              : %"PRIu64"\n", solver.starts);
+-    printf("c conflicts             : %-12"PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
+-    printf("c decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
+-    printf("c propagations          : %-12"PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
+-    printf("c conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
++    printf("c restarts              : %" PRIu64"\n", solver.starts);
++    printf("c conflicts             : %-12" PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
++    printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
++    printf("c propagations          : %-12" PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
++    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
+     if (mem_used != 0) printf("c Memory used           : %.2f MB\n", mem_used);
+     printf("c CPU time              : %g s\n", cpu_time);
+ }
+@@ -111,30 +111,12 @@
+         solver = &S;
+         // Use signal handlers that forcibly quit until the solver will be able to respond to
+         // interrupts:
+-        signal(SIGINT, SIGINT_exit);
+-        signal(SIGXCPU,SIGINT_exit);
++        sigTerm(SIGINT_exit);
++
++        // Try to set resource limits:
++        if (cpu_lim != INT32_MAX) limitTime(cpu_lim);
++        if (mem_lim != INT32_MAX) limitMemory(mem_lim);
+ 
+-        // Set limit on CPU-time:
+-        if (cpu_lim != INT32_MAX){
+-            rlimit rl;
+-            getrlimit(RLIMIT_CPU, &rl);
+-            if (rl.rlim_max == RLIM_INFINITY || (rlim_t)cpu_lim < rl.rlim_max){
+-                rl.rlim_cur = cpu_lim;
+-                if (setrlimit(RLIMIT_CPU, &rl) == -1)
+-                    printf("c WARNING! Could not set resource limit: CPU-time.\n");
+-            } }
+-
+-        // Set limit on virtual memory:
+-        if (mem_lim != INT32_MAX){
+-            rlim_t new_mem_lim = (rlim_t)mem_lim * 1024*1024;
+-            rlimit rl;
+-            getrlimit(RLIMIT_AS, &rl);
+-            if (rl.rlim_max == RLIM_INFINITY || new_mem_lim < rl.rlim_max){
+-                rl.rlim_cur = new_mem_lim;
+-                if (setrlimit(RLIMIT_AS, &rl) == -1)
+-                    printf("c WARNING! Could not set resource limit: Virtual memory.\n");
+-            } }
+-        
+         if (argc == 1)
+             printf("c Reading from standard input... Use '--help' for help.\n");
+ 
+@@ -160,8 +142,7 @@
+ 
+         // Change to signal-handlers that will only notify the solver and allow it to terminate
+         // voluntarily:
+-        signal(SIGINT, SIGINT_interrupt);
+-        signal(SIGXCPU,SIGINT_interrupt);
++        sigTerm(SIGINT_interrupt);
+ 
+         S.parsing = false;
+         S.eliminate(true);
 diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
 --- cominisatps-SAT2016/simp/SimpSolver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/simp/SimpSolver.cc	2019-08-22 15:35:41.645730910 +0200
++++ cominisatps/simp/SimpSolver.cc	2020-07-15 11:33:09.237607600 +0200
 @@ -636,6 +636,7 @@
      int iter = 0;
      int n_cls, n_cls_init, n_vars;
@@ -259,7 +364,7 @@ diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
      touched  .clear(true);
 diff -urB cominisatps-SAT2016/utils/Options.h cominisatps/utils/Options.h
 --- cominisatps-SAT2016/utils/Options.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/utils/Options.h	2019-01-14 16:42:05.047516560 +0100
++++ cominisatps/utils/Options.h	2020-07-15 11:33:09.253212100 +0200
 @@ -282,15 +282,15 @@
          if (range.begin == INT64_MIN)
              fprintf(stderr, "imin");
@@ -279,3 +384,105 @@ diff -urB cominisatps-SAT2016/utils/Options.h cominisatps/utils/Options.h
          if (verbose){
              fprintf(stderr, "\n        %s\n", description);
              fprintf(stderr, "\n");
+diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
+--- cominisatps-SAT2016/utils/System.cc	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/utils/System.cc	2020-07-16 13:11:14.359403600 +0200
+@@ -18,11 +18,13 @@
+ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ **************************************************************************************************/
+ 
++#include <signal.h>
++#include <stdio.h>
++
+ #include "utils/System.h"
+ 
+ #if defined(__linux__)
+ 
+-#include <stdio.h>
+ #include <stdlib.h>
+ 
+ using namespace Minisat;
+@@ -92,4 +94,68 @@
+ #else
+ double Minisat::memUsed() { 
+     return 0; }
++double Minisat::memUsedPeak() { 
++    return 0; }
++#endif
++
++#if !defined(_MSC_VER) && !defined(__MINGW32__)
++void Minisat::limitMemory(uint64_t max_mem_mb)
++{
++// FIXME: OpenBSD does not support RLIMIT_AS. Not sure how well RLIMIT_DATA works instead.
++#if defined(__OpenBSD__)
++#define RLIMIT_AS RLIMIT_DATA
+ #endif
++
++    // Set limit on virtual memory:
++    if (max_mem_mb != 0){
++        rlim_t new_mem_lim = (rlim_t)max_mem_mb * 1024*1024;
++        rlimit rl;
++        getrlimit(RLIMIT_AS, &rl);
++        if (rl.rlim_max == RLIM_INFINITY || new_mem_lim < rl.rlim_max){
++            rl.rlim_cur = new_mem_lim;
++            if (setrlimit(RLIMIT_AS, &rl) == -1)
++                printf("WARNING! Could not set resource limit: Virtual memory.\n");
++        }
++    }
++
++#if defined(__OpenBSD__)
++#undef RLIMIT_AS
++#endif
++}
++#else
++void Minisat::limitMemory(uint64_t /*max_mem_mb*/)
++{
++    printf("WARNING! Memory limit not supported on this architecture.\n");
++}
++#endif
++
++
++#if !defined(_MSC_VER) && !defined(__MINGW32__)
++void Minisat::limitTime(uint32_t max_cpu_time)
++{
++    if (max_cpu_time != 0){
++        rlimit rl;
++        getrlimit(RLIMIT_CPU, &rl);
++        if (rl.rlim_max == RLIM_INFINITY || (rlim_t)max_cpu_time < rl.rlim_max){
++            rl.rlim_cur = max_cpu_time;
++            if (setrlimit(RLIMIT_CPU, &rl) == -1)
++                printf("WARNING! Could not set resource limit: CPU-time.\n");
++        }
++    }
++}
++#else
++void Minisat::limitTime(uint32_t /*max_cpu_time*/)
++{
++    printf("WARNING! CPU-time limit not supported on this architecture.\n");
++}
++#endif
++
++
++void Minisat::sigTerm(void handler(int))
++{
++    signal(SIGINT, handler);
++    signal(SIGTERM,handler);
++#ifdef SIGXCPU
++    signal(SIGXCPU,handler);
++#endif
++}
+diff -urB cominisatps-SAT2016/utils/System.h cominisatps/utils/System.h
+--- cominisatps-SAT2016/utils/System.h	2016-05-02 03:22:00.000000000 +0200
++++ cominisatps/utils/System.h	2020-07-16 11:37:25.567264300 +0200
+@@ -34,6 +34,11 @@
+ static inline double cpuTime(void); // CPU-time in seconds.
+ extern double memUsed();            // Memory in mega bytes (returns 0 for unsupported architectures).
+ extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for unsupported architectures).
++extern void   limitMemory(uint64_t max_mem_mb); // Set a limit on total memory usage. The exact
++                                                // semantics varies depending on architecture.
++extern void   limitTime(uint32_t max_cpu_time); // Set a limit on maximum CPU time. The exact
++                                                // semantics varies depending on architecture.
++extern void   sigTerm(void handler(int));      // Set up handling of available termination signals.
+ 
+ }
+ 
