@@ -235,9 +235,10 @@ diff -urB cominisatps-SAT2016/core/SolverTypes.h cominisatps/core/SolverTypes.h
  inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
  inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
  inline  bool sign      (Lit p)              { return p.x & 1; }
+Tylko w cominisatps: minisat
 diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
 --- cominisatps-SAT2016/mtl/template.mk	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/mtl/template.mk	2020-07-15 11:33:09.206343900 +0200
++++ cominisatps/mtl/template.mk	2020-07-17 10:50:32.263125700 +0200
 @@ -44,7 +44,7 @@
  %.o:			CFLAGS +=$(COPTIMIZE) -g -D DEBUG
  %.op:			CFLAGS +=$(COPTIMIZE) -pg -g -D NDEBUG
@@ -247,6 +248,15 @@ diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
  
  ## Link options
  $(EXEC):		LFLAGS += -g
+@@ -95,7 +95,7 @@
+ depend.mk: $(CSRCS) $(CHDRS)
+ 	@echo Making dependencies
+ 	@$(CXX) $(CFLAGS) -I$(MROOT) \
+-	   $(CSRCS) -MM | sed 's|\(.*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
++		$(CSRCS) -MM | sed 's|\([^:]*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
+ 	@for dir in $(DEPDIR); do \
+ 	      if [ -r $(MROOT)/$${dir}/depend.mk ]; then \
+ 		  echo Depends on: $${dir}; \
 diff -urB cominisatps-SAT2016/simp/Main.cc cominisatps/simp/Main.cc
 --- cominisatps-SAT2016/simp/Main.cc	2016-05-02 03:22:00.000000000 +0200
 +++ cominisatps/simp/Main.cc	2020-07-16 11:42:56.858959200 +0200

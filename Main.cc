@@ -263,7 +263,7 @@ void parseOptions(int argc, char** argv)
             else if (strncmp(arg, "-mem-lim=",  9) == 0) opt_mem_lim  = atoi(arg+9);
 #ifdef MAXPRE
             else if (strncmp(arg, "-maxpre=",   8) == 0) 
-                opt_use_maxpre = true, strncpy(opt_maxpre_str,arg+8,sizeof(opt_maxpre_str));
+                opt_use_maxpre = true, strncpy(opt_maxpre_str,arg+8,sizeof(opt_maxpre_str) - 1);
             else if (strncmp(arg, "-maxpre-skip=", 13) == 0) 
                 opt_use_maxpre = true, opt_maxpre_skip  = atoi(arg+13);
             else if (strncmp(arg, "-maxpre-time=", 13) == 0) 

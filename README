@@ -15,7 +15,8 @@ Quick Install
 2.4 compile the SAT solver library:
     cd simp
     MROOT=.. make libr
-    cd .. ; ln -s . minisat ; cd ..
+    cd ..
+    mkdir minisat ; cd minisat ; ln -s ../core ../simp ../mtl ../utils . ; cd ../..
 
 3.1 clone the MaxPre repository:
     git clone https://github.com/Laakeri/maxpre
@@ -38,3 +39,5 @@ Comments:
 
    - if you want to use unbounded weights in MaxSAT instances, remove # in config.mk in the first line 
      containing BIGWEIGHTS before running the last command
+
+   - The program can be compiled with mingw64 g++ compiler in MSYS2 environment (https://www.msys2.org).

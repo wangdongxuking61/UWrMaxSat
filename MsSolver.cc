@@ -63,6 +63,7 @@ void SIGINT_interrupt(int signum) {
 #ifdef SIGXCPU    
     pb_solver->cpu_interrupt = (signum == SIGXCPU);
 #else
+    (void) signum;
     pb_solver->cpu_interrupt = false;
 #endif
 }
