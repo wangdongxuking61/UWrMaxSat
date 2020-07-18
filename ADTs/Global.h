@@ -75,10 +75,6 @@ typedef unsigned       uint32;
 template<class T> macro T min(T x, T y) { return (x < y) ? x : y; }
 template<class T> macro T max(T x, T y) { return (x > y) ? x : y; }
 
-template <bool> struct STATIC_ASSERTION_FAILURE;
-template <> struct STATIC_ASSERTION_FAILURE<true>{};
-#define TEMPLATE_FAIL STATIC_ASSERTION_FAILURE<false>()
-
 #define PANIC(msg) assert((fprintf(stderr, "%s\n", msg), fflush(stderr), false))
 #define Ping  (fflush(stdout), fprintf(stderr, "%s %d\n", __FILE__, __LINE__), fflush(stderr))
 
@@ -320,8 +316,8 @@ public:
   #endif
 
     // Don't allow copying (error prone):
-    vec<T>&  operator = (vec<T>& other) { TEMPLATE_FAIL; return *this; }
-             vec        (vec<T>& other) { TEMPLATE_FAIL; }
+    vec<T>&  operator = (vec<T>& other) = delete;
+             vec        (vec<T>& other) = delete;
 
     // Duplicatation (preferred instead):
     void copyTo(vec<T>& copy) const { copy.clear(); copy.growTo(sz); for (int i = 0; i < sz; i++) new (&copy[i]) T(data[i]); }
