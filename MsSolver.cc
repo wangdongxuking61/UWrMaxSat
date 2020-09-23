@@ -21,7 +21,7 @@
 
 #include <unistd.h>
 #include <signal.h>
-#include "minisat/utils/System.h"
+#include "System.h"
 #include "Sort.h"
 #include "Debug.h"
 #include <limits>
@@ -483,10 +483,9 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             bool dir = opt_polarity_sug > 0 ? !sign(p) : sign(p);
             sat_solver.setPolarity(var(p), LBOOL(dir));
         }
-#include"System.h"
     bool first_time = false;
     if (opt_cpu_lim != INT32_MAX) {
-        int used_cpu = Minisat::cpuTime();
+        int used_cpu = cpuTime();
         first_time=true; limitTime(used_cpu + (opt_cpu_lim - used_cpu)/4);
     }
     while (1) {
@@ -528,10 +527,10 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             n_solutions++;
             reportf("MODEL# %d:", n_solutions);
             for (Var x = 0; x < pb_n_vars; x++){
-                assert(sat_solver.model[x] != l_Undef);
-                ban.push(mkLit(x, sat_solver.model[x] == l_True));
+                assert(sat_solver.modelValue(x) != l_Undef);
+                ban.push(mkLit(x, sat_solver.modelValue(x) == l_True));
                 if (index2name[x][0] != '#')
-                    reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
+                    reportf(" %s%s", (sat_solver.modelValue(x) == l_False)?"-":"", index2name[x]);
             }
             reportf("\n");
             sat_solver.addClause_(ban);
@@ -539,8 +538,8 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             vec<bool> model;
             Minisat::vec<Lit> soft_unsat;
             for (Var x = 0; x < pb_n_vars; x++)
-                assert(sat_solver.model[x] != l_Undef),
-                model.push(sat_solver.model[x] == l_True);
+                assert(sat_solver.modelValue(x) != l_Undef),
+                model.push(sat_solver.modelValue(x) == l_True);
             for (int i = 0; i < top_for_strat; i++)
                 if (soft_cls[i].snd->size() > 1)
                     model[var(soft_cls[i].snd->last())] = !sign(soft_cls[i].snd->last());
@@ -817,7 +816,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (opt_minimization == 2 && opt_verbosity == 1 && use_base_assump) {
             char *t; reportf("Lower bound  = %s\n", t=toString(LB_goalvalue * goal_gcd)); xfree(t); }
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
-                Minisat::cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
+                cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
             for (int j = 0, i = 0; i < psCs.size(); i++) {
                 const Int &w = soft_cls[psCs[i].snd].fst;
@@ -855,7 +854,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 delayed_assump.clear(); delayed_assump_sum = 0;
                 if (opt_verbosity >= 1) {
                     reportf("Switching to binary search ... (after %g s and %d conflicts) with %d goal literals and %d assumptions\n", 
-                            Minisat::cpuTime(), sat_solver.conflicts, goal_ps.size(), assump_ps.size());
+                            cpuTime(), sat_solver.conflicts, goal_ps.size(), assump_ps.size());
                 }
                 opt_minimization = 2;
                 if (sat) {

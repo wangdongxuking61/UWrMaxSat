@@ -385,8 +385,8 @@ void outputResult(const PbSolver& S, bool optimum)
                     if (S.index2name[i][0] != '#')
                         printf(" %s%s", S.best_model[i]?"":"-", S.index2name[i]);
             }
-            printf("\n");
         }
+        printf("\n");
     }
     if (opt_output_top < 0) {
         if (optimum){

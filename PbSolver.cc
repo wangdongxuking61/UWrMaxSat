@@ -23,7 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <unistd.h>
 #include <signal.h>
-#include "minisat/utils/System.h"
+#include "System.h"
 #include "Sort.h"
 #include "Debug.h"
 
@@ -504,13 +504,12 @@ static PbSolver *pb_solver;
 static
 void SIGINT_interrupt(int /*signum*/) { pb_solver->sat_solver.interrupt(); pb_solver->asynch_interrupt=true; }
 
-Int evalGoal(Linear& goal, Minisat::vec<lbool>& model)
+Int evalGoal(Linear& goal, vec<bool>& model)
 {
     Int sum = 0;
     for (int i = 0; i < goal.size; i++){
-        assert(model[var(goal[i])] != l_Undef);
-        if (( sign(goal[i]) && model[var(goal[i])] == l_False)
-        ||  (!sign(goal[i]) && model[var(goal[i])] == l_True )
+        if (( sign(goal[i]) && model[var(goal[i])] == false)
+        ||  (!sign(goal[i]) && model[var(goal[i])] == true )
         )
             sum += goal(i);
     }
@@ -643,10 +642,10 @@ void PbSolver::solve(solve_Command cmd)
             n_solutions++;
             reportf("MODEL# %d:", n_solutions);
             for (Var x = 0; x < pb_n_vars; x++){
-                assert(sat_solver.model[x] != l_Undef);
-                ban.push(mkLit(x, sat_solver.model[x] == l_True));
+                assert(sat_solver.modelValue(x) != l_Undef);
+                ban.push(mkLit(x, sat_solver.modelValue(x) == l_True));
                 if (index2name[x][0] != '#')
-                    reportf(" %s%s", (sat_solver.model[x] == l_False)?"-":"", index2name[x]);
+                    reportf(" %s%s", (sat_solver.modelValue(x) == l_False)?"-":"", index2name[x]);
             }
             reportf("\n");
             sat_solver.addClause_(ban);
@@ -654,13 +653,13 @@ void PbSolver::solve(solve_Command cmd)
             vec<bool> model;
             Minisat::vec<Lit> soft_unsat;
             for (Var x = 0; x < pb_n_vars; x++)
-                assert(sat_solver.model[x] != l_Undef),
-                    model.push(sat_solver.model[x] == l_True);
+                assert(sat_solver.modelValue(x) != l_Undef),
+                    model.push(sat_solver.modelValue(x) == l_True);
             if (goal == NULL) {
                 model.moveTo(best_model);
                 break;
             }
-            Int goalvalue = (opt_maxsat ? evalGoal(((MsSolver *)this)->soft_cls, model, soft_unsat) : evalGoal(*goal, sat_solver.model)) / goal_gcd;
+            Int goalvalue = (opt_maxsat ? evalGoal(((MsSolver *)this)->soft_cls, model, soft_unsat) : evalGoal(*goal, model)) / goal_gcd;
             if (goalvalue < best_goalvalue) {
                 best_goalvalue = goalvalue;
                 model.moveTo(best_model);
@@ -743,13 +742,18 @@ void PbSolver::printStats()
 {
     static bool statsPrinted = false;
     if (!statsPrinted) {
-        double cpu_time = Minisat::cpuTime();
-        double mem_used = Minisat::memUsedPeak();
+        double cpu_time = cpuTime();
+        double mem_used = memUsedPeak();
+#if defined(CADICAL) || defined(CRYPTOMS)
+        sat_solver.statistics();
+#else
         printf("c restarts               : %" PRIu64"\n", sat_solver.starts);
         printf("c conflicts              : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.conflicts   , sat_solver.conflicts   /cpu_time);
         printf("c decisions              : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", sat_solver.decisions, (float)sat_solver.rnd_decisions*100 / (float)sat_solver.decisions, sat_solver.decisions   /cpu_time);
         printf("c propagations           : %-12" PRIu64"   (%.0f /sec)\n", sat_solver.propagations, sat_solver.propagations/cpu_time);
         printf("c conflict literals      : %-12" PRIu64"   (%4.2f %% deleted)\n", sat_solver.tot_literals, (sat_solver.max_literals - sat_solver.tot_literals)*100 / (double)sat_solver.max_literals);
+#endif
+        printf("c =======================[ UWrMaxSat resources usage ]===========================\n");
         if (mem_used != 0) printf("c Memory used            : %.2f MB\n", mem_used);
         printf("c CPU time               : %g s\n", cpu_time);
         if (srtEncodings != 0 || bddEncodings != 0 || addEncodings != 0)

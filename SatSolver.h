@@ -23,7 +23,13 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define SatSolver_h
 
 #include "minisat/mtl/Vec.h"
+#ifdef CADICAL
+#include "CadicalWrap.h"
+#elif defined(CRYPTOMS)
+#include "CryptoMSWrap.h"
+#else
 #include "minisat/simp/SimpSolver.h"
+#endif
 
 #if defined(GLUCOSE3) || defined(GLUCOSE4)
 namespace Minisat = Glucose;

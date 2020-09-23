@@ -21,6 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "SatSolver.h"
 
+#if !defined(CADICAL) && !defined(CRYPTOMS)
 static Var mapVar(Var x, Minisat::vec<Var>& map, Var& max)
 {
     if (map.size() <= x || map[x] == -1){
@@ -29,13 +30,22 @@ static Var mapVar(Var x, Minisat::vec<Var>& map, Var& max)
     }
     return map[x];
 }
-
+#endif
 
 void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls, int soft_cnt)
 {
     Minisat::vec<Var> map; Var max=0;
     int cnt;
 
+#ifdef CADICAL
+    max = solver->active();
+    cnt = solver->irredundant();
+    (void)soft_cls;
+#elif defined(CRYPTOMS)
+    max = solver->nVars();
+    cnt = nClauses();
+    (void)soft_cls;
+#else
     if (!ok) max=1, cnt=2;
     else {
         cnt = assumptions.size();
@@ -56,6 +66,7 @@ void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat
             }
 
     }
+#endif
     printf("c ============================[ %s Statistics ]============================\n", 
             encoding ? "Encoding" : " Problem");
     printf("c |  Number of variables:  %12d                                         |\n", max);
@@ -68,6 +79,15 @@ void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat
 
 //=================================================================================================
 // Propagate and check:
+#if defined(CADICAL) || defined(CRYPTOMS)
+bool ExtSimpSolver::prop_check(const Minisat::vec<Lit>& assumps, Minisat::vec<Lit>& prop, int )
+{
+    assumps.copyTo(prop);
+    return okay();
+}
+#elif defined(CRYPTOMS)
+
+#else
 bool ExtSimpSolver::prop_check(const Minisat::vec<Lit>& assumps, Minisat::vec<Lit>& prop, int psaving)
 {
     using Minisat::CRef; using Minisat::CRef_Undef;
@@ -136,3 +156,4 @@ bool ExtSimpSolver::prop_check(const Minisat::vec<Lit>& assumps, Minisat::vec<Li
 
     return st && confl == CRef_Undef;
 }
+#endif

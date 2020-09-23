@@ -7,7 +7,7 @@ minisat+
 minisat+_64-bit_static
 minisat+_bignum_static
 minisatp-*
-*.un~
+*.*~
 cominisatp-*
 normalized-*
 minisatp
