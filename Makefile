@@ -17,6 +17,13 @@ BUILD_DIR      ?= build
 # Do not include debug-symbols in release builds
 MINISATP_RELSYM ?= 
 
+# Do not include --static in MacOS
+ifeq ($(shell uname -s),Linux)
+LDFLAG_STATIC =
+else
+LDFLAG_STATIC = --static
+endif
+
 # Sets of compile flags for different build types
 MINISATP_REL    ?= -std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D COMINISATPS $(MAXPRE) $(BIGWEIGHTS)
 MINISATP_DEB    ?= -std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D COMINISATPS $(MAXPRE) $(BIGWEIGHTS)
@@ -106,8 +113,8 @@ $(BUILD_DIR)/dynamic/%.o:			MINISATP_CXXFLAGS +=$(MINISATP_REL) $(MINISATP_FPIC)
 
 ## Build-type Link-flags:
 $(BUILD_DIR)/profile/bin/$(MINISATP):		MINISATP_LDFLAGS += -pg
-$(BUILD_DIR)/release/bin/$(MINISATP):		MINISATP_LDFLAGS += --static $(MINISATP_RELSYM)
-$(BUILD_DIR)/debug/bin/$(MINISATP):	        MINISATP_LDFLAGS += --static
+$(BUILD_DIR)/release/bin/$(MINISATP):		MINISATP_LDFLAGS += $(LDFLAG_STATIC) $(MINISATP_RELSYM)
+$(BUILD_DIR)/debug/bin/$(MINISATP):	        MINISATP_LDFLAGS += $(LDFLAG_STATIC)
 
 ## Executable dependencies
 $(BUILD_DIR)/release/bin/$(MINISATP):	 	$(BUILD_DIR)/release/Main.o $(BUILD_DIR)/release/lib/$(MINISATP_SLIB)

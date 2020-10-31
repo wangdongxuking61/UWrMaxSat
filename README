@@ -40,4 +40,36 @@ Comments:
    - if you want to use unbounded weights in MaxSAT instances, remove # in config.mk in the first line 
      containing BIGWEIGHTS before running the last command
 
+   - you can replace COMiniSatPS SAT solver with (A) CaDiCaL by Armin Biere or (B) Glucose 4.1 by Gilles Audemard 
+     and Laurent Simon - see steps 5A and 5B below
+
    - The program can be compiled with mingw64 g++ compiler in MSYS2 environment (https://www.msys2.org).
+
+5A. clone CaDiCaL and build UWrMaxSat with this SAT solver:
+    cd ..
+    git clone https://github.com/arminbiere/cadical
+    cd cadical
+    patch -p1 <../uwrmaxsat/cadical.patch
+    ./configure
+    make
+    cd ../uwrmaxsat
+    cp config.cadical config.mk
+    make clean
+    make r
+
+5B. clone Glucose 4.1 and build UWrMaxSat with this SAT solver:
+    cd ..
+    wget https://www.labri.fr/perso/lsimon/downloads/softwares/glucose-syrup-4.1.tgz
+    tar zxvf glucose-syrup-4.1.tgz
+    cd glucose-syrup-4.1
+    patch -p1 <../uwrmaxsat/glucose4.1.patch
+    cd simp
+    MROOT=.. make libr
+    cd ..
+    mkdir minisat ; cd minisat ; ln -s ../core ../simp ../mtl ../utils . ; cd ../..
+    cd uwrmaxsat
+    cp config.glucose4 config.mk
+    make r
+
+
+

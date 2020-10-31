@@ -1,6 +1,6 @@
 diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
 --- cominisatps-SAT2016/core/Solver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.cc	2020-07-15 11:33:09.184216400 +0200
++++ cominisatps/core/Solver.cc	2020-07-17 09:34:07.994400936 +0200
 @@ -150,6 +150,7 @@
      trail    .capacity(v+1);
      setDecisionVar(v, dvar);
@@ -187,7 +187,7 @@ diff -urB cominisatps-SAT2016/core/Solver.cc cominisatps/core/Solver.cc
  #endif
 diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
 --- cominisatps-SAT2016/core/Solver.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/Solver.h	2020-07-16 11:08:42.659543400 +0200
++++ cominisatps/core/Solver.h	2020-07-17 09:34:07.994400936 +0200
 @@ -23,7 +23,7 @@
  #ifndef Minisat_Solver_h
  #define Minisat_Solver_h
@@ -216,7 +216,7 @@ diff -urB cominisatps-SAT2016/core/Solver.h cominisatps/core/Solver.h
      lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
 diff -urB cominisatps-SAT2016/core/SolverTypes.h cominisatps/core/SolverTypes.h
 --- cominisatps-SAT2016/core/SolverTypes.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/core/SolverTypes.h	2020-07-16 10:52:23.165440700 +0200
++++ cominisatps/core/SolverTypes.h	2020-07-17 09:34:07.994400936 +0200
 @@ -49,7 +49,7 @@
      int     x;
  
@@ -235,10 +235,9 @@ diff -urB cominisatps-SAT2016/core/SolverTypes.h cominisatps/core/SolverTypes.h
  inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
  inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
  inline  bool sign      (Lit p)              { return p.x & 1; }
-Tylko w cominisatps: minisat
 diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
 --- cominisatps-SAT2016/mtl/template.mk	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/mtl/template.mk	2020-07-17 10:50:32.263125700 +0200
++++ cominisatps/mtl/template.mk	2020-07-17 11:36:18.589345683 +0200
 @@ -44,7 +44,7 @@
  %.o:			CFLAGS +=$(COPTIMIZE) -g -D DEBUG
  %.op:			CFLAGS +=$(COPTIMIZE) -pg -g -D NDEBUG
@@ -253,13 +252,13 @@ diff -urB cominisatps-SAT2016/mtl/template.mk cominisatps/mtl/template.mk
  	@echo Making dependencies
  	@$(CXX) $(CFLAGS) -I$(MROOT) \
 -	   $(CSRCS) -MM | sed 's|\(.*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
-+		$(CSRCS) -MM | sed 's|\([^:]*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
++	   $(CSRCS) -MM | sed 's|\([^:]*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
  	@for dir in $(DEPDIR); do \
  	      if [ -r $(MROOT)/$${dir}/depend.mk ]; then \
  		  echo Depends on: $${dir}; \
 diff -urB cominisatps-SAT2016/simp/Main.cc cominisatps/simp/Main.cc
 --- cominisatps-SAT2016/simp/Main.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/simp/Main.cc	2020-07-16 11:42:56.858959200 +0200
++++ cominisatps/simp/Main.cc	2020-07-17 09:34:07.994400936 +0200
 @@ -24,7 +24,7 @@
  
  #include <signal.h>
@@ -334,7 +333,7 @@ diff -urB cominisatps-SAT2016/simp/Main.cc cominisatps/simp/Main.cc
          S.eliminate(true);
 diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
 --- cominisatps-SAT2016/simp/SimpSolver.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/simp/SimpSolver.cc	2020-07-15 11:33:09.237607600 +0200
++++ cominisatps/simp/SimpSolver.cc	2020-07-17 09:34:07.994400936 +0200
 @@ -636,6 +636,7 @@
      int iter = 0;
      int n_cls, n_cls_init, n_vars;
@@ -374,7 +373,7 @@ diff -urB cominisatps-SAT2016/simp/SimpSolver.cc cominisatps/simp/SimpSolver.cc
      touched  .clear(true);
 diff -urB cominisatps-SAT2016/utils/Options.h cominisatps/utils/Options.h
 --- cominisatps-SAT2016/utils/Options.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/utils/Options.h	2020-07-15 11:33:09.253212100 +0200
++++ cominisatps/utils/Options.h	2020-07-17 09:34:07.994400936 +0200
 @@ -282,15 +282,15 @@
          if (range.begin == INT64_MIN)
              fprintf(stderr, "imin");
@@ -396,7 +395,7 @@ diff -urB cominisatps-SAT2016/utils/Options.h cominisatps/utils/Options.h
              fprintf(stderr, "\n");
 diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
 --- cominisatps-SAT2016/utils/System.cc	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/utils/System.cc	2020-07-16 13:11:14.359403600 +0200
++++ cominisatps/utils/System.cc	2020-10-21 11:29:27.654831916 +0200
 @@ -18,11 +18,13 @@
  OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  **************************************************************************************************/
@@ -412,7 +411,12 @@ diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
  #include <stdlib.h>
  
  using namespace Minisat;
-@@ -92,4 +94,68 @@
+@@ -88,8 +90,73 @@
+     malloc_statistics_t t;
+     malloc_zone_statistics(NULL, &t);
+     return (double)t.max_size_in_use / (1024*1024); }
++double MiniSat::memUsedPeak(void) { return memUsed(); }
+ 
  #else
  double Minisat::memUsed() { 
      return 0; }
@@ -426,7 +430,7 @@ diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
 +// FIXME: OpenBSD does not support RLIMIT_AS. Not sure how well RLIMIT_DATA works instead.
 +#if defined(__OpenBSD__)
 +#define RLIMIT_AS RLIMIT_DATA
- #endif
++#endif
 +
 +    // Set limit on virtual memory:
 +    if (max_mem_mb != 0){
@@ -449,7 +453,7 @@ diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
 +{
 +    printf("WARNING! Memory limit not supported on this architecture.\n");
 +}
-+#endif
+ #endif
 +
 +
 +#if !defined(_MSC_VER) && !defined(__MINGW32__)
@@ -483,7 +487,7 @@ diff -urB cominisatps-SAT2016/utils/System.cc cominisatps/utils/System.cc
 +}
 diff -urB cominisatps-SAT2016/utils/System.h cominisatps/utils/System.h
 --- cominisatps-SAT2016/utils/System.h	2016-05-02 03:22:00.000000000 +0200
-+++ cominisatps/utils/System.h	2020-07-16 11:37:25.567264300 +0200
++++ cominisatps/utils/System.h	2020-07-17 09:34:07.994400936 +0200
 @@ -34,6 +34,11 @@
  static inline double cpuTime(void); // CPU-time in seconds.
  extern double memUsed();            // Memory in mega bytes (returns 0 for unsupported architectures).

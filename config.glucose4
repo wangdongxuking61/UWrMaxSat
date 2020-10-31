@@ -4,8 +4,13 @@ MINISATP_REL?=-std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D INCREMENTAL -D GL
 MINISATP_DEB?=-std=c++11 -O0 -D DEBUG  -Wno-strict-aliasing -D INCREMENTAL -D GLUCOSE4
 MINISATP_PRF?=-std=c++11 -O3 -D NDEBUG -Wno-strict-aliasing -D INCREMENTAL -D GLUCOSE4
 MINISATP_FPIC?=-fpic
-MINISAT_INCLUDE?=-I../glucose-syrup-4.1/include -I../glucose-syrup-4.1/include/minisat
-MINISAT_LIB?=-L../glucose-syrup-4.1/lib -lminisat
+MINISAT_INCLUDE?=-I../glucose-syrup-4.1 -I../glucose-syrup-4.1/minisat
+MINISAT_LIB?=-L../glucose-syrup-4.1/simp -l_release
+ifneq ($(MAXPRE),)
 MCL_INCLUDE?=-I../maxpre/src
 MCL_LIB?=-L../maxpre/src/lib -lmaxpre
-prefix?=../glucose-syrup-4.1
+else
+MCL_INCLUDE?=
+MCL_LIB?=
+endif
+prefix?=
