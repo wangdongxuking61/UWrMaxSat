@@ -18,7 +18,7 @@ BUILD_DIR      ?= build
 MINISATP_RELSYM ?= 
 
 # Do not include --static in MacOS
-ifeq ($(shell uname -s),Linux)
+ifeq ($(shell uname -s),Darwin)
 LDFLAG_STATIC =
 else
 LDFLAG_STATIC = --static
