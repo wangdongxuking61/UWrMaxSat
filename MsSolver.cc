@@ -488,9 +488,10 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         int used_cpu = cpuTime();
         first_time=true; limitTime(used_cpu + (opt_cpu_lim - used_cpu)/4);
     }
+    lbool status;
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
-      lbool status = 
+      status = 
           base_assump.size() == 1 && base_assump[0] == assump_lit ? l_True :
           base_assump.size() == 1 && base_assump[0] == ~assump_lit ? l_False :
           sat_solver.solveLimited(assump_ps);
@@ -578,6 +579,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                     else { 
                         best_goalvalue = Int_MAX;
                         if (soft_unsat.size() > 0) sat_solver.addClause(soft_unsat);
+                        else { status = l_False; break; }
                         for (int i = 0; i < soft_cls.size(); i++)
                             if (soft_unsat[i] == soft_cls[i].snd->last() && soft_cls[i].snd->size() > 1 && 
                                     top_impl_gen.at(var(soft_unsat[i]))) {
@@ -649,10 +651,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             convertPbs(false);
         }
       } else { // UNSAT returned
-        if (assump_ps.size() == 0 && assump_lit == lit_Undef) {
-            if (opt_output_top > 0) printf("v \n");
-            break;
-        }
+        if (assump_ps.size() == 0 && assump_lit == lit_Undef) break;
         {
         Minisat::vec<Lit> core_mus;
         if (opt_core_minimization) {
@@ -871,6 +870,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
       }         
     } // END OF LOOP
 
+    if (status == l_False && opt_output_top > 0) printf("v\n");
     if (goal_gcd != 1) {
         if (best_goalvalue != Int_MAX) best_goalvalue *= goal_gcd;
         if (LB_goalvalue   != Int_MIN) LB_goalvalue *= goal_gcd;
