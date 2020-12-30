@@ -24,7 +24,6 @@
 #include "System.h"
 #include "Sort.h"
 #include "Debug.h"
-#include <limits>
 
 template<typename int_type>
 static int_type gcd(int_type small, int_type big) {

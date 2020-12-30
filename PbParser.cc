@@ -399,7 +399,10 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         if (solver.declared_n_constrs < 0 && ps.size() > 0) n_constrs++;
         ps.clear();
     }
-    if (!opt_use_maxpre) {
+#ifdef MAXPRE
+    if (!opt_use_maxpre)
+#endif
+    {
         if (solver.declared_n_vars < 0 && n_vars > 0) solver.declared_n_vars = n_vars;
         if (solver.declared_n_constrs < 0 && n_constrs > 0) solver.declared_n_constrs = n_constrs;
         gvars = solver.soft_cls.size();

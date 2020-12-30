@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef PbSolver_h
 #define PbSolver_h
 
+#include <limits>
 #include "SatSolver.h"
 #include "Map.h"
 #include "StackAlloc.h"
