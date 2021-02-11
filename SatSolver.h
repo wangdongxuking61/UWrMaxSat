@@ -73,7 +73,7 @@ using weight_t = int64_t;
 class ExtSimpSolver: public SimpSolver {
 public:
     void printVarsCls(bool encoding = true, const vec<Pair<weight_t, Minisat::vec<Lit>* > > *soft_cls = NULL, int soft_cls_sz = 0);
-    bool prop_check   (const Minisat::vec<Lit>& assumps, Minisat::vec<Lit>& prop, int psaving = 0); // compute a list of propagated literals given a set of assumptions
+    bool prop_check   (Lit assump, Minisat::vec<Lit>& prop, int psaving = 2); // compute a list of propagated literals given a set of assumptions
 };
 
 #endif

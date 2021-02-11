@@ -499,13 +499,15 @@ void MsSolver::maxsat_solve(solve_Command cmd)
               if (status == l_True && var(base_assump[i]) < pb_n_vars) addUnit(base_assump[i]);
               assump_ps.pop();
           }
-          base_assump.clear();
+          if (status != l_Undef) base_assump.clear();
       }
       if (first_time) { 
         first_time = false; sat_solver.clearInterrupt(); 
         if (asynch_interrupt && cpu_interrupt) asynch_interrupt = false;
         cpu_interrupt = false; limitTime(opt_cpu_lim);
-      } else if (status  == l_Undef) {
+        if (status == l_Undef) continue;
+      }
+      if (status  == l_Undef) {
         if (asynch_interrupt) { reportf("*** Interrupted ***\n"); break; }
       } else if (status == l_True) { // SAT returned
         if (opt_minimization == 1 && opt_delay_init_constraints) {
@@ -919,18 +921,18 @@ void MsSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assum
     vec<Lit> confl;
     vec<Lit> lits;
     for (int i = 0; i < assump_ps.size() && assump_ps[i] <= max_assump; i++) {
-        Minisat::vec<Lit> assump, props; 
-        assump.push(assump_ps[i]);
-        if (sat_solver.prop_check(assump, props, 2))
+        Minisat::vec<Lit> props;
+        Lit assump = assump_ps[i];
+        if (sat_solver.prop_check(assump, props))
             for (int l, j = 0; j < props.size(); j++) {
                 if ((l = bin_search(assump_ps,  ~props[j])) >= 0 && assump_ps[l] <= max_assump) {
-                    if (!conns.has(assump[0])) conns.set(assump[0],new vec<Lit>());
-                    conns.ref(assump[0])->push(~props[j]);
+                    if (!conns.has(assump)) conns.set(assump,new vec<Lit>());
+                    conns.ref(assump)->push(~props[j]);
                     if (!conns.has(~props[j])) conns.set(~props[j], new vec<Lit>());
-                    conns.ref(~props[j])->push(assump[0]);
+                    conns.ref(~props[j])->push(assump);
                 }
             }  
-        else confl.push(assump_ps[i]);
+        else confl.push(assump);
     }
     conns.domain(conns_lit);
     if (confl.size() > 0) {

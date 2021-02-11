@@ -80,80 +80,62 @@ void ExtSimpSolver::printVarsCls(bool encoding, const vec<Pair<weight_t, Minisat
 //=================================================================================================
 // Propagate and check:
 #if defined(CADICAL) || defined(CRYPTOMS)
-bool ExtSimpSolver::prop_check(const Minisat::vec<Lit>& assumps, Minisat::vec<Lit>& prop, int )
+bool ExtSimpSolver::prop_check(Lit assump, Minisat::vec<Lit>& prop, int )
 {
-    assumps.copyTo(prop);
+    prop.clear(); prop.push(assump);
     return okay();
 }
-#elif defined(CRYPTOMS)
-
+#elif defined(MERGESAT)
+bool ExtSimpSolver::prop_check(Lit assump, Minisat::vec<Lit>& prop, int )
+{
+    if (!ok || propagateLit(assump, prop)) return false; 
+    prop.push(assump);
+    return true;
+}
 #else
-bool ExtSimpSolver::prop_check(const Minisat::vec<Lit>& assumps, Minisat::vec<Lit>& prop, int psaving)
+bool ExtSimpSolver::prop_check(Lit assump, Minisat::vec<Lit>& prop, int psaving)
 {
     using Minisat::CRef; using Minisat::CRef_Undef;
     prop.clear();
 
-    if (!ok)
-        return false;
+    if (!ok) return false;
+    if (value(assump) != l_Undef) return value(assump) == l_True;
 
-    bool    st = true;
-#ifdef MAPLE
-    int trailRec = trailRecord;
-    trailRecord = trail.size();
-#else    
-    int  level = decisionLevel();
-#endif
     CRef confl = CRef_Undef;
 
     // dealing with phase saving
     int psaving_copy = phase_saving;
     phase_saving = psaving;
 
-    // propagate each assumption at a new decision level
-    for (int i = 0; st && confl == CRef_Undef && i < assumps.size(); ++i) {
-        Lit p = assumps[i];
-
-        if (value(p) == l_False)
-            st = false;
-        else if (value(p) != l_True) {
+    // propagate assumption at a new decision level
 #ifdef MAPLE
-            Solver::simpleUncheckEnqueue(p);
-            confl = Solver::simplePropagate();
-#else
-            Solver::newDecisionLevel ();
-            Solver::uncheckedEnqueue(p);
-            confl = Solver::propagate();
-#endif
-        }
+    int trailRec = trailRecord;
+    trailRecord = trail.size();
+    Solver::simpleUncheckEnqueue(assump);
+    confl = Solver::simplePropagate();
+    if (confl == CRef_Undef && trail.size() > trailRecord) { // copying the result
+        int c = trailRecord;
+        if (trail[c] == assump) c++;
+        while (c < trail.size()) prop.push(trail[c++]);
     }
-
-    // copying the result
-#ifdef MAPLE
-    if (trail.size() > trailRec) {
-        for (int c = trailRec; c < trail.size(); c++)
+    cancelUntilTrailRecord(); // backtracking
+    trailRecord = trailRec;
 #else
-    if (decisionLevel() > level) {
-        for (int c = trail_lim[level]; c < trail.size(); ++c)
-#endif            
-            prop.push(trail[c]);
-
-        // if there is a conflict, pushing
-        // the conflicting literal as well
-        if (confl != CRef_Undef)
-            prop.push(ca[confl][0]);
-
-        // backtracking
-#ifdef MAPLE
-        cancelUntilTrailRecord();
-        trailRecord = trailRec;
-#else
-        Solver::cancelUntil(level);
-#endif
+    int  level = decisionLevel();
+    Solver::newDecisionLevel ();
+    Solver::uncheckedEnqueue(assump);
+    confl = Solver::propagate();
+    if (confl == CRef_Undef) { // copying the result
+        int c = trail_lim[level];
+        if (trail[c] == assump) c++;
+        while (c < trail.size()) prop.push(trail[c++]);
     }
+    Solver::cancelUntil(level); // backtracking
+#endif
 
     // restoring phase saving
     phase_saving = psaving_copy;
 
-    return st && confl == CRef_Undef;
+    return confl == CRef_Undef;
 }
 #endif
