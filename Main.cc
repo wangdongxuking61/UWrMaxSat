@@ -461,14 +461,15 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
 #endif
         if (optimum || opt_satisfiable_out) {
             buf[0] = '\n'; buf[1] = 'v'; lst += 2;
-            if (opt_bin_model_out)
+            if (opt_bin_model_out) {
+                buf[lst++] = ' ';
                 for (int i = 0; i < S.declared_n_vars; i++) {
                     if (lst + 3 >= BUF_SIZE) { 
-                        buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                        buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; buf[1] = ' '; lst = 2; 
                     }
                     buf[lst++] = (S.best_model[i]? '1' : '0');
                 }
-            else
+            } else
                 for (int i = 0; i < S.best_model.size(); i++)
                     if (S.index2name[i][0] != '#') {
                         int sz = strlen(S.index2name[i]);
