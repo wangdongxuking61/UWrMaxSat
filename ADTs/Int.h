@@ -56,6 +56,7 @@ class Int {
 public:
     Int() : data(Int_Undef__) {}
     Int(int   x) : data(x) {}
+    Int(long  x) : data(x) {}
     Int(int64 x) : data(x) {}
 
     // "operator =" and copy-constructor "Int(const Int& src)" are default defined to the right thing.

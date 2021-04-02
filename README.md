@@ -53,7 +53,7 @@ When citing, always reference my [ICTAI 2020](https://www.ictai2020.org/) confer
 ### Other SAT solvers
 
 You can replace COMiniSatPS SAT solver with (A) CaDiCaL by Armin Biere or (B) Glucose 4.1 by Gilles Audemard 
-and Laurent Simon - see steps 5(A) and 5(B) below.
+and Laurent Simon or (C) mergesat by Norbert Manthey - see steps 5(A) or 5(B) or 5(C) below.
 
 * **5(A)** clone CaDiCaL and build UWrMaxSat with this SAT solver:  
     cd ..  
@@ -79,5 +79,15 @@ and Laurent Simon - see steps 5(A) and 5(B) below.
     mkdir minisat ; cd minisat ; ln -s ../core ../simp ../mtl ../utils . ; cd ../..  
     cd uwrmaxsat  
     cp config.glucose4 config.mk  
+    make r
+
+* **5(C)** clone mergesat and build UWrMaxSat with this SAT solver:  
+    cd ..  
+    git clone https://github.com/conp-solutions/mergesat
+    cd mergesat
+    make lr  
+    cd ../uwrmaxsat  
+    cp config.mergesat config.mk  
+    make clean  
     make r
 

@@ -421,10 +421,10 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
             for (int i = 0; i < S.best_model.size(); i++)
                 trueLiterals.push_back(S.best_model[i] ? i+1 : -i-1);
             model = maxpre_ptr->reconstruct(trueLiterals);
+            vec<bool> bmodel( abs(model.back()) + 1);
+            for (int i = model.size() - 1; i >= 0; i--) bmodel[abs(model[i])] = (model[i] > 0);
             if (!optimum && opt_satisfiable_out) {
                 Int sum = 0;
-                vec<bool> bmodel( abs(model.back()) + 1);
-                for (int i = model.size() - 1; i >= 0; i--) bmodel[abs(model[i])] = (model[i] > 0);
                 for (int j, i = pb_solver->orig_soft_cls.size() - 1; i >= 0; i--) {
                     for (j = pb_solver->orig_soft_cls[i].snd->size() - 1; j >= 0; j--) {
                         Lit p = (*pb_solver->orig_soft_cls[i].snd)[j];
@@ -445,17 +445,26 @@ static void handlerOutputResult(const PbSolver& S, bool optimum = true)
             }
             if (optimum || opt_satisfiable_out) {
                 buf[lst++] = '\n'; buf[lst++] = 'v';
-                for (unsigned i = 0; i < model.size(); i++) {
-                    if (lst + 15 >= BUF_SIZE) { 
-                        buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
-                    }
+                if (opt_bin_model_out) {
                     buf[lst++] = ' ';
-                    if (model[i] < 0) { buf[lst++] = '-'; model[i] = -model[i]; }
-                    char *first = buf + lst;
-                    for (int v = model[i]; v > 0; v /= 10) buf[lst++] = '0' + v%10;
-                    for (char *last = buf+lst-1; first < last; first++, last--) { 
-                        char c = *first; *first = *last; *last = c; }
-                }
+                    for (int i = 1; i < bmodel.size(); i++) {
+                        if (lst + 3 >= BUF_SIZE) { 
+                            buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; buf[1] = ' '; lst = 2; 
+                        }
+                        buf[lst++] = (bmodel[i]? '1' : '0');
+                    }
+                } else
+                    for (unsigned i = 0; i < model.size(); i++) {
+                        if (lst + 15 >= BUF_SIZE) { 
+                            buf[lst++] = '\n'; lst = write(1, buf, lst); buf[0] = 'v'; lst = 1; 
+                        }
+                        buf[lst++] = ' ';
+                        if (model[i] < 0) { buf[lst++] = '-'; model[i] = -model[i]; }
+                        char *first = buf + lst;
+                        for (int v = model[i]; v > 0; v /= 10) buf[lst++] = '0' + v%10;
+                        for (char *last = buf+lst-1; first < last; first++, last--) { 
+                            char c = *first; *first = *last; *last = c; }
+                    }
             }
         } else
 #endif
