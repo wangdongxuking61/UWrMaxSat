@@ -43,6 +43,8 @@ MINISAT_INCLUDE?=-I$(includedir) -I$(includedir)/minisat -I../cominisatps
 MINISAT_LIB    ?=-L$(libdir) -L../cominisatps/simp -l_release
 MCL_INCLUDE    ?=-I../maxpre/src
 MCL_LIB        ?=-L../maxpre/src/lib -lmaxpre
+SCIP_INCLUDE    ?=-I../scipoptsuite-7.0.2/scip/src -I../scipoptsuite-7.0.2/build
+SCIP_LIB        ?=-L../scipoptsuite-7.0.2/build/lib -lscip -lsoplex-pic
 
 ## Write Configuration  ###########################################################################
 
@@ -57,6 +59,8 @@ config:
 	   echo 'MINISATP_FPIC?=$(MINISATP_FPIC)'               ; \
 	   echo 'MINISAT_INCLUDE?=$(MINISAT_INCLUDE)' ; \
 	   echo 'MINISAT_LIB?=$(MINISAT_LIB)'         ; \
+	   echo 'SCIP_INCLUDE?=$(SCIP_INCLUDE)' ; \
+       echo 'SCIP_LIB?=$(SCIP_LIB)'         ; \
            echo 'ifneq ($$(MAXPRE),)'                  ; \
 	   echo 'MCL_INCLUDE?=$(MCL_INCLUDE)'         ; \
 	   echo 'MCL_LIB?=$(MCL_LIB)'                 ; \
@@ -71,7 +75,7 @@ config:
 INSTALL ?= install
 
 # Target file names
-MINISATP      = uwrmaxsat#  Name of MiniSat+ main executable.
+MINISATP      = cashwmaxsat#  Name of MiniSat+ main executable.
 MINISATP_SLIB = libminisatp.a#  Name of MiniSat+ static library.
 MINISATP_DLIB = libminisatp.so# Name of MiniSat+ shared library.
 
@@ -80,8 +84,8 @@ SOMAJOR=1
 SOMINOR=0
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISATP_CXXFLAGS = -IADTs -include Global.h -include Main.h -D_FILE_OFFSET_BITS=64 -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra  $(MCL_INCLUDE) $(MINISAT_INCLUDE)
-MINISATP_LDFLAGS  = -Wall  $(MCL_LIB) $(MINISAT_LIB) -lz -lgmp
+MINISATP_CXXFLAGS = -IADTs -include Global.h -include Main.h -D_FILE_OFFSET_BITS=64 -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra  $(MCL_INCLUDE) $(MINISAT_INCLUDE) $(SCIP_INCLUDE)
+MINISATP_LDFLAGS  = -Wall  $(MCL_LIB) $(MINISAT_LIB) $(SCIP_LIB) -lz -lgmp
 
 ifeq ($(VERB),)
 ECHO=@

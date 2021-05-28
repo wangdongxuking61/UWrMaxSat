@@ -309,6 +309,148 @@ void MsSolver::optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>
 
 static inline int log2(int n) { int i=0; while (n>>=1) i++; return i; }
 
+template<class T>
+SCIP_RETCODE add_constr(SCIP *scip,
+                        const T &ps,
+                        const std::vector<SCIP_VAR *> &vars,
+                        const std::string &const_name)
+{
+    SCIP_CONS *cons = nullptr;
+    SCIP_CALL(SCIPcreateConsBasicLinear(scip, &cons, const_name.c_str(), 0, nullptr, nullptr, 0, SCIPinfinity(scip)));
+    int lhs = 1;
+    for (int j = 0; j < ps.size(); j++)
+    {
+        auto lit = ps[j];
+        auto v = vars[var(lit)];
+        SCIP_CALL(SCIPaddCoefLinear(scip, cons, v, sign(lit) ? -1 : 1));
+        if (sign(lit))
+            lhs--;
+    }
+    SCIP_CALL(SCIPchgLhsLinear(scip, cons, lhs));
+    SCIP_CALL(SCIPaddCons(scip, cons));
+    SCIP_CALL(SCIPreleaseCons(scip, &cons));
+    return SCIP_OKAY;
+}
+
+SCIP_RETCODE MsSolver::scip_solve(const Minisat::vec<Lit> &assump_ps,
+                                  const vec<Int> &assump_Cs,
+                                  const IntLitQueue &delayed_assump,
+                                  bool weighted_instance,
+                                  bool *found_opt)
+{
+    // 1. create scip context object
+    SCIP *scip = nullptr;
+    SCIP_CALL(SCIPcreate(&scip));
+    SCIP_CALL(SCIPincludeDefaultPlugins(scip));
+    SCIP_CALL(SCIPcreateProbBasic(scip, "CASHWMaxSat"));
+    SCIP_CALL(SCIPsetRealParam(scip, "limits/time", 600));
+    if (opt_verbosity == 0)
+        SCIP_CALL(SCIPsetIntParam(scip, "display/verblevel", 0));
+
+    // 2. create variable(include relax)
+    std::vector<SCIP_VAR *> vars;
+    for (Var v = 0; v < sat_solver.nVars(); ++v)
+    {
+        SCIP_VAR *var = nullptr;
+        std::string name = "x" + std::to_string(v + 1);
+        SCIP_Real lb = 0, ub = 1;
+        if (value(v) == l_False) ub = 0;
+        else if (value(v) == l_True) lb = 1;
+        SCIP_CALL(SCIPcreateVarBasic(scip, &var, name.c_str(), lb, ub, 0, SCIP_VARTYPE_BINARY));
+        SCIP_CALL(SCIPaddVar(scip, var));
+        vars.push_back(var);
+    }
+
+    // 3. add constraint
+    for (int i = 0; i < sat_solver.nClauses(); i++)
+    {
+        bool is_satisfied;
+        const Minisat::Clause &ps = sat_solver.GetClause(i, is_satisfied);
+        if (!is_satisfied)
+        {
+            std::string cons_name = "cons" + std::to_string(i);
+            add_constr(scip, ps, vars, cons_name);
+        }
+    }
+    weight_t obj_offset = 0;
+    auto set_var_coef = [&vars, &obj_offset, scip, this](Lit relax, weight_t weight)
+    {
+        weight_t coef = sign(relax) ? weight : -weight;
+        coef *= this->goal_gcd;
+        SCIP_CALL(SCIPaddVarObj(scip, vars[var(relax)], coef));
+        if (coef < 0)
+            obj_offset += abs(coef);
+    };
+    if (weighted_instance)
+    {
+        for (int i = 0; i < top_for_strat; ++i)
+        {
+            const Pair<weight_t, Minisat::vec<Lit> *> &weight_ps = soft_cls[i];
+            const Minisat::vec<Lit> &ps = *(weight_ps.snd);
+            auto relax = ps.last();
+            if (ps.size() > 1) relax = ~relax;
+            weight_t weight = weight_ps.fst;
+            set_var_coef(relax, weight);
+            if (ps.size() > 1)
+            {
+                std::string cons_name = "soft_cons" + std::to_string(i);
+                add_constr(scip, ps, vars, cons_name);
+            }
+        }
+    }
+
+    // 4. set objective
+    reportf("assump_ps.size=%u\n", assump_ps.size());
+    for (int i = 0; i < assump_ps.size(); ++i)
+        set_var_coef(assump_ps[i], tolong(assump_Cs[i]));
+    reportf("delayed_assump.size=%u\n", delayed_assump.getHeap().size() - 1);
+    for (int i = 1; i < delayed_assump.getHeap().size(); ++i)
+    {
+        const Pair<Int, Lit> &weight_lit = delayed_assump.getHeap()[i];
+        Lit relax = weight_lit.snd;
+        weight_t weight = tolong(weight_lit.fst);
+        set_var_coef(relax, weight);
+    }
+    // create a var for the fixed part of objective
+    reportf("obj_offset=%ld\n", obj_offset);
+    obj_offset += tolong(LB_goalvalue) * goal_gcd;
+    if (obj_offset != 0)
+    {
+        SCIP_VAR *var = nullptr;
+        SCIP_CALL(SCIPcreateVarBasic(scip, &var, "obj_offset", 1, 1, obj_offset, SCIP_VARTYPE_BINARY));
+        SCIP_CALL(SCIPaddVar(scip, var));
+        vars.push_back(var);
+    }
+
+    // 5. do solve
+    // SCIP_CALL((SCIPwriteOrigProblem(scip, "1.lp", nullptr, FALSE)));
+    // SCIP_CALL((SCIPwriteTransProblem(scip, "2.lp", nullptr, FALSE)));
+    reportf("start SCIPsolve()...\n");
+    SCIP_CALL(SCIPsolve(scip));
+    if (SCIP_STATUS_OPTIMAL == SCIPgetStatus(scip))
+    {
+        *found_opt = true;
+        SCIP_SOL *sol = SCIPgetBestSol(scip);
+        assert(sol != NULL);
+        // SCIP_CALL(SCIPprintSol(scip, sol, NULL, FALSE));
+        best_goalvalue = long(round(SCIPgetSolOrigObj(scip, sol)));
+        reportf("SCIPgetSolOrigObj = %ld\n", tolong(best_goalvalue));
+        for (Var x = 0; x < pb_n_vars; x++)
+        {
+            SCIP_Real v = SCIPgetSolVal(scip, sol, vars[x]);
+            best_model.push(long(round(v)) == 1);
+        }
+    } else
+        *found_opt = false;
+
+    // 6. release
+    for (auto v: vars)
+        SCIP_CALL(SCIPreleaseVar(scip, &v));
+    vars.clear();
+    SCIP_CALL(SCIPfree(&scip));
+    return SCIP_OKAY;
+}
+
 void MsSolver::maxsat_solve(solve_Command cmd)
 {
     if (!okay()) {
@@ -487,6 +629,18 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         int used_cpu = cpuTime();
         first_time=true; limitTime(used_cpu + (opt_cpu_lim - used_cpu)/4);
     }
+
+    if (pb_n_vars < 100000 && pb_n_constrs < 100000 && soft_cls.size() < 100000)
+    {
+        bool found_opt = false;
+        reportf("use scip\n");
+        SCIP_RETCODE ret = scip_solve(assump_ps, assump_Cs, delayed_assump, weighted_instance, &found_opt);
+        if (ret == SCIP_OKAY && found_opt)
+            return;
+        else
+            reportf("scip timeout\n");
+    }
+    
     lbool status;
     while (1) {
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);

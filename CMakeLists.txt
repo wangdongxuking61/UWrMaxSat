@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
-project(uwrmaxsat)
+project(cashwmaxsat)
 
 #--------------------------------------------------------------------------------------------------
 # Configurable options:
@@ -38,11 +38,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 find_library(GMP_LIBRARY gmp)
 #include_directories(${GMP_INCLUDE_DIR})
+set(minisat_SOURCE_DIR "../cominisatps/")
+set(minisatp_SOURCE_DIR "./")
 find_library(MINISAT_LIB_STATIC _release PATH ${minisat_SOURCE_DIR}/simp)
 
 include_directories(${minisat_SOURCE_DIR})
 include_directories(${minisatp_SOURCE_DIR})
 include_directories(${minisatp_SOURCE_DIR}/ADTs)
+include_directories(../) # ln -s cominisatps minisat
+include_directories(../scipoptsuite-7.0.2/scip/src)
+include_directories(../scipoptsuite-7.0.2/build)
+link_directories(../scipoptsuite-7.0.2/build/lib)
 
 #--------------------------------------------------------------------------------------------------
 # Build Targets:
@@ -72,21 +78,21 @@ add_library(minisatp-lib-shared SHARED ${MINISATP_LIB_SOURCES})
 target_link_libraries(minisatp-lib-shared minisat-lib-shared ${GMP_LIBRARY})
 target_link_libraries(minisatp-lib-static ${MINISAT_LIB_STATIC} ${GMP_LIBRARY})
 
-set_target_properties(minisatp-lib-static PROPERTIES OUTPUT_NAME "uwrmaxsat")
+set_target_properties(minisatp-lib-static PROPERTIES OUTPUT_NAME "cashwmaxsat")
 set_target_properties(minisatp-lib-shared 
   PROPERTIES
-    OUTPUT_NAME "uwrmaxsat" 
+    OUTPUT_NAME "cashwmaxsat"
     VERSION ${MINISATP_VERSION}
     SOVERSION ${MINISATP_SOVERSION})
 
-add_executable(uwrmaxsat Main.cc)
+add_executable(cashwmaxsat Main.cc)
 
-target_link_libraries(uwrmaxsat minisatp-lib-static)
+target_link_libraries(cashwmaxsat minisatp-lib-static scip soplex-pic)
 
 if(STATIC_BINARIES)
-  target_link_libraries(uwrmaxsat minisatp-lib-static)
+  target_link_libraries(cashwmaxsat minisatp-lib-static)
 else()
-  target_link_libraries(uwrmaxsat minisatp-lib-shared)
+  target_link_libraries(cashwmaxsat minisatp-lib-shared)
 endif()
 
 

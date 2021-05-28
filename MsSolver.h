@@ -23,6 +23,9 @@
 #define MsSolver_h
 
 #include "PbSolver.h"
+#include <vector>
+#include <scip/scip.h>
+#include <scip/scipdefplugins.h>
 
 Int evalGoal(const vec<Pair<weight_t, Minisat::vec<Lit>* > >& soft_cls, vec<bool>& model, Minisat::vec<Lit>& soft_unsat);
 
@@ -41,6 +44,8 @@ class IntLitQueue {
     IntLitQueue() { heap.push(Pair_new(1, lit_Undef)); }
 
     bool empty() { return heap.size() <= 1; }
+
+    const vec<Pair<Int, Lit> >& getHeap() const { return heap; }
 
     void clear() { heap.shrink(heap.size() - 1); }
 
@@ -99,6 +104,7 @@ class MsSolver : public PbSolver {
 
     void    harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs);
     void    optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>& assump_ps, Minisat::vec<Lit>& new_assump);
+    SCIP_RETCODE scip_solve(const Minisat::vec<Lit> &assump_ps, const vec<Int> &assump_Cs, const IntLitQueue &delayed_assump, bool weighted_instance, bool *found_opt);
     void    maxsat_solve(solve_Command cmd = sc_Minimize); 
     void    preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
                                            IntLitQueue& delayed_assump, Int& delayed_assump_sum);
