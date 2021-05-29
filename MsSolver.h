@@ -24,6 +24,7 @@
 
 #include "PbSolver.h"
 #include <vector>
+#include <algorithm>
 #include <scip/scip.h>
 #include <scip/scipdefplugins.h>
 
@@ -36,11 +37,21 @@ static inline int hparent(int i) { return i / 2; }
 class IntLitQueue {
   private:
     vec<Pair<Int, Lit> > heap;
+    std::map<Lit, int> core_size;
 
     bool cmp(int x, int y) { 
-        return heap[x].fst > heap[y].fst /*|| heap[x].fst == heap[y].fst && heap[x].snd > heap[y].snd*/; }
+        if(weighted_instance)
+            return heap[x].fst > heap[y].fst;
+        else
+        {
+            if(heap[x].fst != heap[y].fst)  return heap[x].fst > heap[y].fst;
+            else                            return core_size[heap[x].snd] < core_size[heap[y].snd];
+        }
+    }
 
   public:
+    bool weighted_instance = false;
+    
     IntLitQueue() { heap.push(Pair_new(1, lit_Undef)); }
 
     bool empty() { return heap.size() <= 1; }
@@ -51,7 +62,8 @@ class IntLitQueue {
 
     const Pair<Int, Lit>& top() { return heap[1]; }
 
-    void push(Pair<Int, Lit> p) { 
+    void push(Pair<Int, Lit> p, int core_size = 0) {
+        this->core_size[p.snd] = core_size;
         heap.push();
         int i = heap.size() - 1;
         heap[0] = std::move(p);
@@ -104,7 +116,7 @@ class MsSolver : public PbSolver {
 
     void    harden_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs);
     void    optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>& assump_ps, Minisat::vec<Lit>& new_assump);
-    SCIP_RETCODE scip_solve(const Minisat::vec<Lit> &assump_ps, const vec<Int> &assump_Cs, const IntLitQueue &delayed_assump, bool weighted_instance, bool *found_opt);
+    SCIP_RETCODE scip_solve(const Minisat::vec<Lit> &assump_ps, const vec<Int> &assump_Cs, const IntLitQueue &delayed_assump, bool weighted_instance, bool &found_opt);
     void    maxsat_solve(solve_Command cmd = sc_Minimize); 
     void    preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
                                            IntLitQueue& delayed_assump, Int& delayed_assump_sum);
