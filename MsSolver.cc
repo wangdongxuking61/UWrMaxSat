@@ -845,7 +845,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             sat_solver.conflict.copyTo(bestConfict);
 
             if(opt_verbosity) reportf("Second solve...\n");
-            unsigned int solve_cn = 0;
+            int solve_cn = 0;
             auto _2nd_solve_begin = cpuTime();
             srand(0);
             while(solve_cn < multi_solve_num_limit || (cpuTime() - _2nd_solve_begin) < _1st_solve_time)
@@ -853,8 +853,12 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 if((cpuTime() - _2nd_solve_begin) > multi_solve_time_limit)   break;
                 if(solve_cn > 10000) break;
                 solve_cn++;
-                std::random_shuffle(&assump_tmp[0], &assump_tmp[assump_tmp.size()]);
+                if(solve_cn == 1)
+                    sat_solver.increased_assump_bcp = true;
+                else
+                    std::random_shuffle(&assump_tmp[0], &assump_tmp[assump_tmp.size()]);
                 lbool res = sat_solver.solveLimited(assump_tmp);
+                if(solve_cn == 1) sat_solver.increased_assump_bcp = false;
                 assert(res == l_False);
                 if(bestConfict.size() > sat_solver.conflict.size() )
                     sat_solver.conflict.copyTo(bestConfict);
