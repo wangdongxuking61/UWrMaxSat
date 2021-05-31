@@ -84,7 +84,7 @@ SOMAJOR=1
 SOMINOR=0
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
-MINISATP_CXXFLAGS = -IADTs -include Global.h -include Main.h -D_FILE_OFFSET_BITS=64 -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wno-parentheses -Wextra  $(MCL_INCLUDE) $(MINISAT_INCLUDE) $(SCIP_INCLUDE)
+MINISATP_CXXFLAGS = -IADTs -include Global.h -include Main.h -D_FILE_OFFSET_BITS=64 -D __STDC_LIMIT_MACROS -Wall -Wno-parentheses -Wextra  $(MCL_INCLUDE) $(MINISAT_INCLUDE) $(SCIP_INCLUDE)
 MINISATP_LDFLAGS  = -Wall  $(MCL_LIB) $(MINISAT_LIB) $(SCIP_LIB) -lz -lgmp
 
 ifeq ($(VERB),)
