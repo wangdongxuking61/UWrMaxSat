@@ -21,6 +21,7 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <algorithm>
 #include "System.h"
 #include "Sort.h"
 #include "Debug.h"
@@ -309,6 +310,292 @@ void MsSolver::optimize_last_constraint(vec<Linear*>& constrs, Minisat::vec<Lit>
 
 static inline int log2(int n) { int i=0; while (n>>=1) i++; return i; }
 
+// add conflict kernels for uwr and constraints for scip
+void MsSolver::add_benefit_constraint(vec<Pair<Lit,int> > &psCs,vec<bool> &model){
+    int count=0; // record sat constri
+    int count_unsat_constri = 0; // record unsat record
+    if(use_add_constr){
+        for (int i = 0; i < psCs.size(); i++)
+        {
+            Lit p = psCs[i].fst;
+            bool in_harden = harden_lits.has(p);
+            if (!in_harden)
+            {
+                if ((model[var(p)] && !sign(p)) || (!model[var(p)] && sign(p)))
+                {
+                    sat_clause_first.push(p);
+                }
+                else
+                {
+                    unsat_clause_first.push(p);
+                    unsat_clause_second_Cs.push(Int(soft_cls[psCs[i].snd].fst));
+                }
+            }
+        }
+        srand(0);
+        unsat_clause_first.copyTo(unsat_clause_second);
+        std::random_shuffle(&unsat_clause_first[0], &unsat_clause_first[unsat_clause_first.size()]);
+        double begin=cpuTime();
+        double end;
+
+        // executor unsat to sat add_const
+        for(int i=0; i<unsat_clause_first.size(); i++){
+            end=cpuTime();
+            if(count > 100 || (end - begin >100))break;
+            sat_clause_first.push(unsat_clause_first[i]);
+            sat_solver.setConfBudget(1000);
+            int verb = sat_solver.verbosity;
+            sat_solver.verbosity = 0;
+            if(sat_solver.solveLimited(sat_clause_first) == l_False){
+                Minisat::vec<Lit> core_mus;
+                std::vector<Lit> temp;
+                for (int i = 0; i < sat_solver.conflict.size(); i++){
+                    core_mus.push(~sat_solver.conflict[i]);
+                    temp.push_back(sat_solver.conflict[i]);
+                }
+                constr_scip.push_back(temp);
+                core_minimization(sat_solver, core_mus);
+                if (core_mus.size() > 0 && core_mus.size() < 6){
+                    count++;
+                    sat_solver.addClause(core_mus);
+                }
+            }
+            sat_solver.budgetOff();
+            sat_solver.verbosity = verb;
+            sat_clause_first.pop();
+        }
+
+        // executor unsat add_constr
+        double begin_unsat_constri=cpuTime();
+        double end_unsat_constri;
+        while(count_unsat_constri < 100 && unsat_clause_second.size() > 0){
+            end_unsat_constri=cpuTime();
+            if(end_unsat_constri - begin_unsat_constri > 100)break;
+            sat_solver.setConfBudget(1000);
+            int verb = sat_solver.verbosity;
+            sat_solver.verbosity = 0;
+            auto status_unsat = sat_solver.solveLimited(unsat_clause_second);
+            if( status_unsat == l_False){
+                //add constri and removed conflicts clause
+                assert(sat_solver.conflict.size() != 0);
+                Minisat::vec<Lit> core_mus;
+                std::vector<Lit> temp;
+                for (int i = 0; i < sat_solver.conflict.size(); i++){
+                    temp.push_back(sat_solver.conflict[i]);
+                    core_mus.push(~sat_solver.conflict[i]);
+                }
+                constr_scip.push_back(temp);
+                core_minimization(sat_solver, core_mus);
+                if (core_mus.size() > 0 && core_mus.size() < 10){
+                    count_unsat_constri++;
+                    sat_solver.addClause(core_mus);
+                }
+                int removed = 0;
+                int j;
+                for (int i = 0; i < core_mus.size(); i++)
+                {
+                    Lit p = ~core_mus[i];
+                    if ((j = bin_search(unsat_clause_second, p)) >= 0){
+                        unsat_clause_second_Cs[j] = -unsat_clause_second_Cs[j];
+                        removed++;
+                    }
+                }
+                if(removed > 0){
+                    int j = 0;
+                    for (int i = 0; i < unsat_clause_second.size(); i++)
+                    {
+                        if(unsat_clause_second_Cs[i] < 0){
+                            continue;
+                        }
+                        if( j < i ){
+                            unsat_clause_second[j] = unsat_clause_second[i], unsat_clause_second_Cs[j] = unsat_clause_second_Cs[i];
+                        }
+                        j++;
+                    }
+                }
+                if ((removed = unsat_clause_second.size() - j) > 0)
+                    unsat_clause_second.shrink(removed), unsat_clause_second_Cs.shrink(removed);
+            }else if(status_unsat == l_True){
+                sat_solver.budgetOff();
+                sat_solver.verbosity = verb;
+                break;
+            }
+            sat_solver.budgetOff();
+            sat_solver.verbosity = verb;
+        }
+    }
+    printf("unsat_to_sat add_constr =: %d,   unsat add_constr =:  %d, total =:  %d \n",count_unsat_constri,count,count_unsat_constri + count);
+}
+
+void MsSolver::satlike_solve(vec<bool> &model){
+    int c = satlike.num_hclauses;
+    satlike.num_sclauses = soft_cls.size();
+    satlike.num_clauses = satlike.num_hclauses + satlike.num_sclauses;
+
+    for (int i = 0; i < soft_cls.size(); i++)
+    {
+        satlike.org_clause_weight[c + i] = soft_cls[i].fst;
+        if (soft_cls[i].snd->size() == 1)
+            satlike.clause_lit_count[c + i] = soft_cls[i].snd->size();
+        else
+            satlike.clause_lit_count[c + i] = soft_cls[i].snd->size() - 1;
+
+        satlike.clause_lit[c + i] = new mylit[satlike.clause_lit_count[c + i] + 1];
+        int j;
+        for (j = 0; j < satlike.clause_lit_count[c + i]; ++j)
+        {
+            satlike.clause_lit[c + i][j].clause_num = c + i;
+            satlike.clause_lit[c + i][j].var_num = var((*soft_cls[i].snd)[j]) + 1;
+            satlike.clause_lit[c + i][j].sense = (1 - sign((*soft_cls[i].snd)[j]));
+            satlike.var_lit_count[var((*soft_cls[i].snd)[j]) + 1]++;
+        }
+        satlike.clause_lit[c + i][j].var_num = 0;
+        satlike.clause_lit[c + i][j].clause_num = -1;
+    }
+    satlike.build_instance();
+    Minisat::vec<Lit> empty_assumpt;
+    std::cout << "c changing to satlike solver!!!" << std::endl;
+    std::vector<int> init_solu(satlike.num_vars + 1);
+    if(use_hard_clause_value_init){
+        if(sat_solver.solveLimited(empty_assumpt) == l_True){
+            satlike.settings();
+            for (Var x = 0; x < satlike.num_vars; x++)
+                init_solu[x + 1] = (sat_solver.model[x] == l_True);
+        }
+    }
+    satlike.init(init_solu);
+    start_timing();
+    int time_limit_for_ls = 15;
+    int step;
+    if (satlike.if_using_neighbor)
+    {
+        for (step = 1; step < satlike.max_flips; ++step)
+        {
+            if (satlike.hard_unsat_nb == 0 &&
+                (satlike.soft_unsat_weight < satlike.opt_unsat_weight || satlike.best_soln_feasible == 0))
+            {
+                satlike.max_flips = step + satlike.max_non_improve_flip;
+                time_limit_for_ls = get_runtime() + 15;
+                if (satlike.soft_unsat_weight < satlike.opt_unsat_weight)
+                {
+                    satlike.best_soln_feasible = 1;
+                    satlike.opt_unsat_weight = satlike.soft_unsat_weight;
+                    //std::cout << "c step " << step << std::endl;
+                    std::cout << "c satlike opt unsat weight: " << satlike.opt_unsat_weight << std::endl;
+                    for (int v = 1; v <= satlike.num_vars; ++v)
+                        satlike.best_soln[v] = satlike.cur_soln[v];
+                }
+                if (satlike.opt_unsat_weight == 0)
+                    break;
+            }
+            int flipvar = satlike.pick_var();
+            satlike.flip(flipvar);
+            satlike.time_stamp[flipvar] = step;
+
+            if (step % 1000 == 0)
+            {
+                if (get_runtime() > time_limit_for_ls || get_runtime() > 300)
+                    break;
+            }
+        }
+    }
+    else
+    {
+        for (step = 1; step < satlike.max_flips; ++step)
+        {
+            if (satlike.hard_unsat_nb == 0 &&
+                (satlike.soft_unsat_weight < satlike.opt_unsat_weight || satlike.best_soln_feasible == 0))
+            {
+                satlike.max_flips = step + satlike.max_non_improve_flip;
+                time_limit_for_ls = get_runtime() + 15;
+                if (satlike.soft_unsat_weight < satlike.opt_unsat_weight)
+                {
+                    satlike.best_soln_feasible = 1;
+                    satlike.opt_unsat_weight = satlike.soft_unsat_weight;
+                    //std::cout << "c step " << step << std::endl;
+                    std::cout << "c satlike opt unsat weight: " << satlike.opt_unsat_weight << std::endl;
+                    //satlike.verify_sol();
+                    for (int v = 1; v <= satlike.num_vars; ++v)
+                        satlike.best_soln[v] = satlike.cur_soln[v];
+                }
+                if (satlike.opt_unsat_weight == 0)
+                    break;
+            }
+            int flipvar = satlike.pick_var();
+            satlike.flip2(flipvar);
+            satlike.time_stamp[flipvar] = step;
+
+            if (step % 1000 == 0)
+            {
+                if (get_runtime() > time_limit_for_ls || get_runtime() > 300)
+                    break;
+            }
+        }
+    }
+    std::cout << "c satlike search done!" << std::endl;
+    if(!satlike.verify_sol()){
+        printf("verify_sol failed turn to satlike_broken\n");
+        return;
+    }
+
+    std::cout << "c soft clause size=" << soft_cls.size() << std::endl;
+    Minisat::vec<Lit> soft_unsat;
+    for (int v = 0; v < satlike.num_vars; ++v)
+        model.push(satlike.best_soln[v + 1]);
+    for (Var x = satlike.num_vars; x < pb_n_vars; x++)
+        assert(sat_solver.model[x] != l_Undef),
+                model.push(sat_solver.model[x] == l_True);
+
+    for (int i = 0; i < soft_cls.size(); i++)
+    {
+        if (soft_cls[i].snd->size() > 1)
+        {
+            Lit relax =(soft_cls[i].snd->last());
+            if (satisfied_soft_cls(soft_cls[i].snd, model))
+            {
+                model[var(relax)] = sign(relax);
+            }
+            else
+            {
+                model[var(relax)] = !sign(relax);
+            }
+        }
+    }
+    model.growTo(model.size()+am1_cls.size());
+
+    for (int i = 0; i < am1_cls.size(); ++i)
+    {
+        bool ifs = false;
+        for (int j = 0; j < am1_cls[i].size() - 1; ++j)
+        {
+            Lit relax=am1_cls[i][j];
+            if (model[var(relax)] && !sign(relax) || !model[var(relax)] && sign(relax))
+            {
+                ifs = true;
+                break;
+            }
+        }
+        Lit temp = am1_cls[i][am1_cls[i].size() - 1];
+        if (ifs)
+        {
+            model[var(temp)] = sign(temp);
+        }
+        else
+            model[var(temp)] = !sign(temp);
+    }
+    std::cout << "c lb=" << tolong(LB_goalvalue) << " ub=" << tolong(UB_goalvalue) << std::endl;
+    goalvalue_satlike = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
+    if (goalvalue_satlike < best_goalvalue)
+    {
+        best_goalvalue = goalvalue_satlike;
+        model.copyTo(best_model);
+        for(int i=0; i< model.size(); i++){
+            model_value += toString(model[i]);
+        }
+    }
+    std::cout << "c get satlike search result" << "goal value=: " << tolong(goalvalue_satlike)<< std::endl;
+}
+
 template<class T>
 SCIP_RETCODE add_constr(SCIP *scip,
                         const T &ps,
@@ -329,6 +616,20 @@ SCIP_RETCODE add_constr(SCIP *scip,
     SCIP_CALL(SCIPchgLhsLinear(scip, cons, lhs));
     SCIP_CALL(SCIPaddCons(scip, cons));
     SCIP_CALL(SCIPreleaseCons(scip, &cons));
+    return SCIP_OKAY;
+}
+
+SCIP_RETCODE init_sol(SCIP *scip, const std::vector<SCIP_VAR *> &vars,std::string &values)
+{
+    assert(vars.size() == values.size());
+    SCIP_SOL *sol;
+    SCIP_CALL(SCIPcreateSol(scip, &sol, NULL));
+    for (int i = 0; i < vars.size(); i++)
+        SCIP_CALL(SCIPsetSolVal(scip, sol, vars[i], values[i] - '0'));
+    SCIP_Bool stored;
+    SCIP_CALL(SCIPaddSol(scip, sol, &stored));
+    std::cout << "init solution " << (stored ? "success\n" : "failed\n");
+    SCIP_CALL(SCIPfreeSol(scip, &sol));
     return SCIP_OKAY;
 }
 
@@ -381,6 +682,15 @@ SCIP_RETCODE MsSolver::scip_solve(const Minisat::vec<Lit> &assump_ps,
         if (coef < 0)
             obj_offset += abs(coef);
     };
+
+    if(!constr_scip.empty()){
+        for(int i=0; i<constr_scip.size(); i++){
+            std::vector<Lit> &constr = constr_scip.at(i);
+            std::string cons_name = "satlike_constraint" + std::to_string(i + sat_solver.nClauses());
+            add_constr(scip, constr, vars, cons_name);
+        }
+    }
+
     if (weighted_instance)
     {
         for (int i = 0; i < top_for_strat; ++i)
@@ -420,9 +730,15 @@ SCIP_RETCODE MsSolver::scip_solve(const Minisat::vec<Lit> &assump_ps,
         SCIP_CALL(SCIPcreateVarBasic(scip, &var, "obj_offset", 1, 1, obj_offset, SCIP_VARTYPE_BINARY));
         SCIP_CALL(SCIPaddVar(scip, var));
         vars.push_back(var);
+        model_value += "1";
     }
 
-    // 5. do solve
+    //5. set init sol
+    if(!model_value.empty()){
+        init_sol(scip,vars,model_value);
+    }
+
+    // 6. do solve
     // SCIP_CALL((SCIPwriteOrigProblem(scip, "1.lp", nullptr, FALSE)));
     // SCIP_CALL((SCIPwriteTransProblem(scip, "2.lp", nullptr, FALSE)));
     reportf("start SCIPsolve()...\n");
@@ -444,7 +760,7 @@ SCIP_RETCODE MsSolver::scip_solve(const Minisat::vec<Lit> &assump_ps,
     } else
         found_opt = false;
 
-    // 6. release
+    // 7. release
     for (auto v: vars)
         SCIP_CALL(SCIPreleaseVar(scip, &v));
     vars.clear();
@@ -643,6 +959,13 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         first_time=true; limitTime(used_cpu + (opt_cpu_lim - used_cpu)/4);
     }
 
+    // Try to use satlike to obtain efficient feasible solutions
+    if(satlike_is_use){
+        vec<bool> model_satlike;
+        satlike_solve(model_satlike);
+        add_benefit_constraint(psCs,model_satlike);
+    }
+    // use scip to solve
     if (pb_n_vars < 100000 && pb_n_constrs < 100000 && soft_cls.size() < 100000)
     {
         bool found_opt = false;
@@ -1245,11 +1568,23 @@ void MsSolver::preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assum
             }
             Lit r = mkLit(sat_solver.newVar(VAR_UPOL, !opt_branch_pbvars), true);
             sat_solver.setFrozen(var(r), true);
-            cls.push(~r); assump_ps.push(r); assump_Cs.push(min_Cs);
-            am1_rels.push(Pair_new(r,min_Cs));
+            cls.push(~r);
+            std::vector<Lit> mytemcls;
+            for (int i = 0; i < cls.size(); ++i)
+            {
+                mytemcls.push_back((cls[i]));
+            }
+            assump_ps.push(r);
+            assump_Cs.push(min_Cs);
+            am1_rels.push(Pair_new(r, min_Cs));
+            am1_cls.push_back(mytemcls);
             sat_solver.addClause(cls);
-            if (ind.size() > 2) min_Cs = Int(ind.size() - 1) * min_Cs;
-            am1_cnt++; am1_len_sum += am1.size();  LB_goalvalue += min_Cs; harden_goalval += min_Cs;
+            if (ind.size() > 2)
+                min_Cs = Int(ind.size() - 1) * min_Cs;
+            am1_cnt++;
+            am1_len_sum += am1.size();
+            LB_goalvalue += min_Cs;
+            harden_goalval += min_Cs;
         }
     }
     if (am1_cnt > 0 || confl.size() > 0) clear_assumptions(assump_ps, assump_Cs);

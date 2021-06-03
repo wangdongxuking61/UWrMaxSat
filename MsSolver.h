@@ -23,6 +23,7 @@
 #define MsSolver_h
 
 #include "PbSolver.h"
+#include "algsatlike.h"
 #include <vector>
 #include <algorithm>
 #include <scip/scip.h>
@@ -99,7 +100,20 @@ class MsSolver : public PbSolver {
         , harden_goalval(0)
         , fixed_goalval(0)
         , goal_gcd(1)      {}
-
+    /***------ params for satlike ----***/
+    bool satlike_is_use =true;
+    bool use_hard_clause_value_init =true;
+    bool use_add_constr = true;
+    Minisat::vec<Lit> sat_clause_first;
+    Minisat::vec<Lit> unsat_clause_first;
+    Minisat::vec<Lit> unsat_clause_second;
+    vec<Int> unsat_clause_second_Cs;
+    std::vector<std::vector<Lit>> am1_cls;
+    Satlike satlike;
+    /***------ params for satlike ----***/
+    std::vector<std::vector<Lit>>constr_scip;               // saving the constraint from satlike to scip
+    Int goalvalue_satlike = INT_MAX;
+    std::string model_value;
     Int                 harden_goalval,  //  Harden goalval used in the MaxSAT preprocessing 
                         fixed_goalval;   // The sum of weights of soft clauses that must be false
     vec<Pair<weight_t, Minisat::vec<Lit>* > > orig_soft_cls; // Soft clauses before preprocessing by MaxPre; empty if MaxPre is not used
@@ -120,6 +134,8 @@ class MsSolver : public PbSolver {
     void    maxsat_solve(solve_Command cmd = sc_Minimize); 
     void    preprocess_soft_cls(Minisat::vec<Lit>& assump_ps, vec<Int>& assump_Cs, const Lit max_assump, const Int& max_assump_Cs, 
                                            IntLitQueue& delayed_assump, Int& delayed_assump_sum);
+    void satlike_solve(vec<bool> &model_satlike);
+    void add_benefit_constraint(vec<Pair<Lit,int> > &psCs,vec<bool> &model);
 } ;
 
 #endif

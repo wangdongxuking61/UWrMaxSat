@@ -20,7 +20,7 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
-
+#include <iostream>
 #include "PbParser.h"
 #include "File.h"
 #include "Sort.h"
@@ -63,7 +63,6 @@ public:
 
 //=================================================================================================
 // PB Parser:
-
 
 /*
 The 'B' (parser Buffer) parameter should implement:
@@ -296,10 +295,15 @@ static void parse_p_line(B& in, S& solver, bool& wcnf_format, Int& hard_bound)
 
     n_constrs = toint(parseInt(in));
 
+    solver.satlike.num_vars = n_vars;
+    solver.satlike.num_clauses = n_constrs;
     skipWhitespace(in);
     if (*in >= '0' && *in <= '9' || *in == '+') 
         hard_bound = parseInt(in);
 
+    solver.satlike.top_clause_weight = tolong(hard_bound);
+    reportf("v=%d, c=%d, top=%ld", solver.satlike.num_vars, solver.satlike.num_clauses, solver.satlike.top_clause_weight);
+    solver.satlike.allocate_memory();
     if (!opt_use_maxpre) {
         solver.allocConstrs(n_vars, n_constrs);
         for (int i = 1; i <= n_vars; i++) {
@@ -330,8 +334,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
 {
     vec<Lit> ps, gps; vec<Int> gCs; vec<char> tmp;
     int    gvars = 0;
-    Int one(1), weight(0);
-    int n_vars = 0, n_constrs = 0;
+    Int one = 1, weight;
 
 #ifdef MAXPRE
     extern bool opt_use_maxpre;
@@ -341,131 +344,170 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
     extern maxPreprocessor::PreprocessorInterface *maxpre_ptr;
     std::vector<std::vector<int> > clauses;
     std::vector<uint64_t>  weights;
-    Int weight_sum(0);
 #endif
+    Satlike &ls_solver = solver.satlike;
 
-    tmp.clear(); tmp.growTo(15,0);
-    while (*in != EOF){
-        skipWhitespace(in);
-        if (*in == 'h') ++in, weight = hard_bound;
+    int *temc = new int[solver.satlike.num_vars + 1];
+    for (int v = 1; v <= solver.satlike.num_vars; ++v)
+    {
+        solver.satlike.var_lit_count[v] = 0;
+        solver.satlike.var_lit[v] = NULL;
+        solver.satlike.var_neighbor[v] = NULL;
+    }
+    reportf("\n  begin parse\n");
+    int c = 0;
+    solver.satlike.num_hclauses = 0;
+    solver.satlike.num_sclauses = 0;
+    tmp.clear();
+    tmp.growTo(15, 0);
+    while (*in != EOF)
+    {
+        weight = (wcnf_format ? parseInt(in) : 1);
+        solver.satlike.org_clause_weight[c] = tolong(weight);
+
+        if (solver.satlike.org_clause_weight[c] == solver.satlike.top_clause_weight)
+        {
+            solver.satlike.num_hclauses++;
+        }
         else
-            weight = (wcnf_format ? parseInt(in) : Int(1));
+            solver.satlike.num_sclauses++;
+
+        solver.satlike.clause_lit_count[c] = 0;
+
 #ifdef MAXPRE
         if (opt_use_maxpre) clauses.push_back(std::vector<int>());
 #endif
-        while (1) {
-            bool negated = parseLit(in,tmp);
-            if (tmp.size() == 2 && tmp[0] == '0') break;
-            int v = atoi(&tmp[0]);
+        while (1)
+        {
+            bool negated = parseLit(in, tmp);
+            if (tmp.size() == 2 && tmp[0] == '0')
+                break;
+
 #ifdef MAXPRE
-            if (opt_use_maxpre) clauses.back().push_back(negated ? -v : v), ps.push(mkLit(v, negated));
+            int v = atoi(tmp);
+            if (opt_use_maxpre)
+                clauses.back().push_back(negated ? -v : v), ps.push(mkLit(v, negated));
             else
 #endif
+            ps.push(mkLit(solver.getVar(tmp), negated));
+
+            int v = atoi(tmp);
+            temc[solver.satlike.clause_lit_count[c]++] = (negated ? -v : v);
+        }
+        if (solver.satlike.org_clause_weight[c] == solver.satlike.top_clause_weight)
+        {
+            solver.satlike.clause_lit[c] = new mylit[solver.satlike.clause_lit_count[c] + 1];
+            int i;
+            for (i = 0; i < solver.satlike.clause_lit_count[c]; ++i)
             {
-                if (solver.declared_n_vars < 0) {
-                    vec<char> t(15,0);
-                    while (n_vars < v) { sprintf(&t[0], "%d", ++n_vars); solver.getVar(t); }
-                }
-                ps.push(mkLit(solver.getVar(tmp), negated));
+                solver.satlike.clause_lit[c][i].clause_num = c;
+                solver.satlike.clause_lit[c][i].var_num = abs(temc[i]);
+                solver.satlike.clause_lit[c][i].sense = temc[i] > 0 ? 1 : 0;
+                solver.satlike.var_lit_count[abs(temc[i])]++;
             }
+            solver.satlike.clause_lit[c][i].var_num = 0;
+            solver.satlike.clause_lit[c][i].clause_num = -1;
+            c++;
         }
         skipEndOfLine(in);
 #ifdef MAXPRE
-        if (opt_use_maxpre) {
-            if (weight <= 0) { clauses.pop_back(); ps.clear(); continue; }
-            weights.push_back(weight >= hard_bound ? 0 : tolong(weight));
-            if (weight < hard_bound) {
+        if (opt_use_maxpre)
+        {
+            weights.push_back(tolong(weight));
+            if (weight < hard_bound)
                 solver.storeSoftClause(ps, tolong(weight));
-                weight_sum += weight;
-            }
-        } else 
-#endif
-        if (weight <= 0) { ps.clear(); continue; }
-        else if (weight >= hard_bound) {
-            if (!solver.addClause(ps)) return false;
-        } else {
-            if (ps.size() == 1) {
-                if (!opt_maxsat_msu) gps.push(~ps.last()), gCs.push(weight);
-            } else {
-                ps.push(lit_Undef);
-                if (!opt_maxsat_msu) gps.push(ps.last()), gCs.push(weight);
-            }
-#ifdef BIG_WEIGHTS
-            solver.storeSoftClause(ps, weight);
-#else
-            solver.storeSoftClause(ps, tolong(weight));
-#endif
         }
-        if (solver.declared_n_constrs < 0 && ps.size() > 0) n_constrs++;
+        else
+#endif
+        if (weight >= hard_bound)
+        {
+            if (!solver.addClause(ps))
+                return false;
+        }
+        else
+        {
+            gvars++;
+            if (ps.size() == 1)
+            {
+                if (!opt_maxsat_msu)
+                    gps.push(~ps.last()), gCs.push(weight);
+            }
+            else
+            {
+                sprintf(&tmp[0], "#%d", gvars);
+                ps.push(mkLit(solver.getVar(tmp), true));
+                if (!opt_maxsat_msu)
+                    gps.push(ps.last()), gCs.push(weight);
+            }
+            solver.storeSoftClause(ps, tolong(weight));
+        }
         ps.clear();
     }
 #ifdef MAXPRE
-    if (!opt_use_maxpre)
-#endif
+    if (opt_use_maxpre)
     {
-        if (solver.declared_n_vars < 0 && n_vars > 0) solver.declared_n_vars = n_vars;
-        if (solver.declared_n_constrs < 0 && n_constrs > 0) solver.declared_n_constrs = n_constrs;
-        gvars = solver.soft_cls.size();
-        tmp.clear(); tmp.growTo(16,0);
-        for (int i = 0; i < gvars; i++)
-            if (solver.soft_cls[i].snd->last() == lit_Undef) {
-                sprintf(&tmp[0],"#%d",i + 1);
-                Lit p = mkLit(solver.getVar(tmp), true);
-                solver.soft_cls[i].snd->last() = p;
-                if (!opt_maxsat_msu) gps[i] = p;
-            }
-    }
-#ifdef MAXPRE
-    if (opt_use_maxpre) {
-        reportf("Using MaxPre - an MaxSAT preprocessor by Tuukka Korhonen (2017) with techniques: %s\n", 
+        reportf("Using MaxPre - an MaxSAT preprocessor by Tuukka Korhonen (2017) with techniques: %s\n",
                 opt_maxpre_str);
-        if (++weight_sum < hard_bound) hard_bound = weight_sum;
         uint64_t topWeight = tolong(hard_bound);
-        for (auto &w : weights) 
-            if (w == 0 || w > topWeight) w = topWeight;
         maxpre_ptr = new maxPreprocessor::PreprocessorInterface(clauses, weights, topWeight);
-        if (opt_maxpre_skip >= 10) maxpre_ptr->setSkipTechnique(opt_maxpre_skip);
-        if (opt_maxpre_time > 0)   maxpre_ptr->preprocess(std::string(opt_maxpre_str), 0, opt_maxpre_time);
-        else                       maxpre_ptr->preprocess(std::string(opt_maxpre_str));
-        if (opt_verbosity > 0) maxpre_ptr->printTimeLog(std::cout);
+        if (opt_maxpre_skip >= 10)
+            maxpre_ptr->setSkipTechnique(opt_maxpre_skip);
+        if (opt_maxpre_time > 0)
+            maxpre_ptr->preprocess(std::string(opt_maxpre_str), 0, opt_maxpre_time);
+        else
+            maxpre_ptr->preprocess(std::string(opt_maxpre_str));
+        if (opt_verbosity > 0)
+            maxpre_ptr->printTimeLog(std::cout);
         solver.soft_cls.moveTo(solver.orig_soft_cls);
-        solver.soft_cls.clear(); clauses.clear(); weights.clear();
+        solver.soft_cls.clear();
+        clauses.clear();
+        weights.clear();
         std::vector<int> labels;
         maxpre_ptr->getInstance(clauses, weights, labels);
         assert(clauses.size() == weights.size());
-        tmp.clear(); tmp.growTo(15,0);
-        for (unsigned maxvar = 1, i = 0 ; i < clauses.size(); i++) {
-            ps.clear(); 
-            for (unsigned j = 0; j < clauses[i].size(); j++) {
+        for (unsigned maxvar = 1, i = 0; i < clauses.size(); i++)
+        {
+            ps.clear();
+            for (unsigned j = 0; j < clauses[i].size(); j++)
+            {
                 unsigned var = abs(clauses[i][j]);
-                for ( ; maxvar <= var; maxvar++) {
-                    sprintf(&tmp[0],"%d",maxvar);
+                for (; maxvar <= var; maxvar++)
+                {
+                    sprintf(&tmp[0], "%d", maxvar);
                     solver.getVar(tmp);
                 }
                 ps.push(mkLit(var - 1, clauses[i][j] < 0));
             }
-            if (weights[i] == 0) continue;
-            if (weights[i] >= topWeight) {
-                if (!solver.addClause(ps)) return false;
-            } else {
-                if (!opt_maxsat_msu) 
+            if (weights[i] == 0)
+                continue;
+            if (weights[i] >= topWeight)
+            {
+                if (!solver.addClause(ps))
+                    return false;
+            }
+            else
+            {
+                if (!opt_maxsat_msu)
                     gps.push(ps.size() == 1 ? ~ps.last() : ps.last()), gCs.push((int64_t)weights[i]);
                 solver.storeSoftClause(ps, (int64_t)weights[i]);
             }
         }
-        clauses.clear(); weights.clear();
+        clauses.clear();
+        weights.clear();
     }
 #endif
-    if (gvars == 0 && !opt_maxsat_msu) {
-        tmp.clear(); tmp.growTo(10,0);
-        sprintf(&tmp[0],"#%d",1);
+    if (gvars == 0 && !opt_maxsat_msu)
+    {
+        tmp.clear();
+        tmp.growTo(15, 0);
+        sprintf(&tmp[0], "#%d", 1);
         gps.push(mkLit(solver.getVar(tmp)));
         gCs.push(one);
     }
-    if (!opt_maxsat_msu) solver.addGoal(gps, gCs);
+    if (!opt_maxsat_msu)
+        solver.addGoal(gps, gCs);
     return true;
 }
-
 
 //=================================================================================================
 // Main parser functions:
@@ -503,7 +545,7 @@ void parse_PB_file(cchar* filename, PbSolver& solver, bool old_format, bool abor
 template<class B, class S>
 static bool parse_WCNF(B& in, S& solver, bool abort_on_error)
 {
-    Int hard_bound = WEIGHT_MAX;
+    Int hard_bound = Int_MAX;
     bool wcnf_format = true;
 
     try{
