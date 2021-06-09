@@ -345,7 +345,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
     std::vector<std::vector<int> > clauses;
     std::vector<uint64_t>  weights;
 #endif
-    Satlike &ls_solver = solver.satlike;
+//    Satlike &ls_solver = solver.satlike;
 
     int *temc = new int[solver.satlike.num_vars + 1];
     for (int v = 1; v <= solver.satlike.num_vars; ++v)
@@ -365,7 +365,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
         weight = (wcnf_format ? parseInt(in) : 1);
         solver.satlike.org_clause_weight[c] = tolong(weight);
 
-        if (solver.satlike.org_clause_weight[c] == solver.satlike.top_clause_weight)
+        if (static_cast<unsigned long long>(solver.satlike.org_clause_weight[c]) == solver.satlike.top_clause_weight)
         {
             solver.satlike.num_hclauses++;
         }
@@ -394,7 +394,7 @@ static bool parse_wcnfs(B& in, S& solver, bool wcnf_format, Int hard_bound)
             int v = atoi(tmp);
             temc[solver.satlike.clause_lit_count[c]++] = (negated ? -v : v);
         }
-        if (solver.satlike.org_clause_weight[c] == solver.satlike.top_clause_weight)
+        if (static_cast<unsigned long long>(solver.satlike.org_clause_weight[c]) == solver.satlike.top_clause_weight)
         {
             solver.satlike.clause_lit[c] = new mylit[solver.satlike.clause_lit_count[c] + 1];
             int i;

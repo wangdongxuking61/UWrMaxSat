@@ -391,7 +391,7 @@ void MsSolver::add_benefit_constraint(vec<Pair<Lit,int> > &psCs,vec<bool> &model
                     sat_solver.addClause(core_mus);
                 }
                 int removed = 0;
-                int j;
+                int j = 0;
                 for (int i = 0; i < core_mus.size(); i++)
                 {
                     Lit p = ~core_mus[i];
@@ -401,7 +401,7 @@ void MsSolver::add_benefit_constraint(vec<Pair<Lit,int> > &psCs,vec<bool> &model
                     }
                 }
                 if(removed > 0){
-                    int j = 0;
+                    j = 0;
                     for (int i = 0; i < unsat_clause_second.size(); i++)
                     {
                         if(unsat_clause_second_Cs[i] < 0){
@@ -454,7 +454,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
     }
     satlike.build_instance();
     Minisat::vec<Lit> empty_assumpt;
-    std::cout << "c changing to satlike solver!!!" << std::endl;
+    reportf("c changing to satlike solver!!!");
     std::vector<int> init_solu(satlike.num_vars + 1);
     if(use_hard_clause_value_init){
         if(sat_solver.solveLimited(empty_assumpt) == l_True){
@@ -480,8 +480,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
                 {
                     satlike.best_soln_feasible = 1;
                     satlike.opt_unsat_weight = satlike.soft_unsat_weight;
-                    //std::cout << "c step " << step << std::endl;
-                    std::cout << "c satlike opt unsat weight: " << satlike.opt_unsat_weight << std::endl;
+                    reportf("c satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
                     for (int v = 1; v <= satlike.num_vars; ++v)
                         satlike.best_soln[v] = satlike.cur_soln[v];
                 }
@@ -512,9 +511,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
                 {
                     satlike.best_soln_feasible = 1;
                     satlike.opt_unsat_weight = satlike.soft_unsat_weight;
-                    //std::cout << "c step " << step << std::endl;
-                    std::cout << "c satlike opt unsat weight: " << satlike.opt_unsat_weight << std::endl;
-                    //satlike.verify_sol();
+                    reportf("c satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
                     for (int v = 1; v <= satlike.num_vars; ++v)
                         satlike.best_soln[v] = satlike.cur_soln[v];
                 }
@@ -532,13 +529,12 @@ void MsSolver::satlike_solve(vec<bool> &model){
             }
         }
     }
-    std::cout << "c satlike search done!" << std::endl;
+    reportf(" c satlike search done!\n");
     if(!satlike.verify_sol()){
         printf("verify_sol failed turn to satlike_broken\n");
         return;
     }
 
-    std::cout << "c soft clause size=" << soft_cls.size() << std::endl;
     Minisat::vec<Lit> soft_unsat;
     for (int v = 0; v < satlike.num_vars; ++v)
         model.push(satlike.best_soln[v + 1]);
@@ -563,10 +559,10 @@ void MsSolver::satlike_solve(vec<bool> &model){
     }
     model.growTo(model.size()+am1_cls.size());
 
-    for (int i = 0; i < am1_cls.size(); ++i)
+    for (size_t i = 0; i < am1_cls.size(); ++i)
     {
         bool ifs = false;
-        for (int j = 0; j < am1_cls[i].size() - 1; ++j)
+        for (size_t j = 0; j < am1_cls[i].size() - 1; ++j)
         {
             Lit relax=am1_cls[i][j];
             if (model[var(relax)] && !sign(relax) || !model[var(relax)] && sign(relax))
@@ -583,7 +579,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
         else
             model[var(temp)] = !sign(temp);
     }
-    std::cout << "c lb=" << tolong(LB_goalvalue) << " ub=" << tolong(UB_goalvalue) << std::endl;
+    reportf(" c lb= %d   ub=%d \n",tolong(LB_goalvalue),tolong(UB_goalvalue));
     goalvalue_satlike = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
     if (goalvalue_satlike < best_goalvalue)
     {
@@ -593,7 +589,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
             model_value += toString(model[i]);
         }
     }
-    std::cout << "c get satlike search result" << "goal value=: " << tolong(goalvalue_satlike)<< std::endl;
+    reportf(" c get satlike search result, goal value=: %d\n",tolong(goalvalue_satlike));
 }
 
 template<class T>
@@ -605,7 +601,7 @@ SCIP_RETCODE add_constr(SCIP *scip,
     SCIP_CONS *cons = nullptr;
     SCIP_CALL(SCIPcreateConsBasicLinear(scip, &cons, const_name.c_str(), 0, nullptr, nullptr, 0, SCIPinfinity(scip)));
     int lhs = 1;
-    for (int j = 0; j < ps.size(); j++)
+    for (size_t j = 0; j < ps.size(); j++)
     {
         auto lit = ps[j];
         auto v = vars[var(lit)];
@@ -624,7 +620,7 @@ SCIP_RETCODE init_sol(SCIP *scip, const std::vector<SCIP_VAR *> &vars,std::strin
     assert(vars.size() == values.size());
     SCIP_SOL *sol;
     SCIP_CALL(SCIPcreateSol(scip, &sol, NULL));
-    for (int i = 0; i < vars.size(); i++)
+    for (size_t i = 0; i < vars.size(); i++)
         SCIP_CALL(SCIPsetSolVal(scip, sol, vars[i], values[i] - '0'));
     SCIP_Bool stored;
     SCIP_CALL(SCIPaddSol(scip, sol, &stored));
@@ -684,7 +680,7 @@ SCIP_RETCODE MsSolver::scip_solve(const Minisat::vec<Lit> &assump_ps,
     };
 
     if(!constr_scip.empty()){
-        for(int i=0; i<constr_scip.size(); i++){
+        for(size_t i = 0; i < constr_scip.size(); i++){
             std::vector<Lit> &constr = constr_scip.at(i);
             std::string cons_name = "satlike_constraint" + std::to_string(i + sat_solver.nClauses());
             add_constr(scip, constr, vars, cons_name);
