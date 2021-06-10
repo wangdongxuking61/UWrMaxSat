@@ -424,7 +424,7 @@ void MsSolver::add_benefit_constraint(vec<Pair<Lit,int> > &psCs,vec<bool> &model
             sat_solver.verbosity = verb;
         }
     }
-    printf("unsat_to_sat add_constr =: %d,   unsat add_constr =:  %d, total =:  %d \n",count_unsat_constri,count,count_unsat_constri + count);
+    reportf("unsat_to_sat add_constr =: %d,   unsat add_constr =:  %d, total =:  %d \n",count_unsat_constri,count,count_unsat_constri + count);
 }
 
 void MsSolver::satlike_solve(vec<bool> &model){
@@ -454,7 +454,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
     }
     satlike.build_instance();
     Minisat::vec<Lit> empty_assumpt;
-    reportf("c changing to satlike solver!!!");
+    reportf("changing to satlike solver!!!");
     std::vector<int> init_solu(satlike.num_vars + 1);
     if(use_hard_clause_value_init){
         if(sat_solver.solveLimited(empty_assumpt) == l_True){
@@ -480,7 +480,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
                 {
                     satlike.best_soln_feasible = 1;
                     satlike.opt_unsat_weight = satlike.soft_unsat_weight;
-                    reportf("c satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
+                    reportf("satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
                     for (int v = 1; v <= satlike.num_vars; ++v)
                         satlike.best_soln[v] = satlike.cur_soln[v];
                 }
@@ -511,7 +511,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
                 {
                     satlike.best_soln_feasible = 1;
                     satlike.opt_unsat_weight = satlike.soft_unsat_weight;
-                    reportf("c satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
+                    reportf("satlike opt unsat weight: %d \n",satlike.opt_unsat_weight);
                     for (int v = 1; v <= satlike.num_vars; ++v)
                         satlike.best_soln[v] = satlike.cur_soln[v];
                 }
@@ -529,9 +529,9 @@ void MsSolver::satlike_solve(vec<bool> &model){
             }
         }
     }
-    reportf(" c satlike search done!\n");
+    reportf("satlike search done!\n");
     if(!satlike.verify_sol()){
-        printf("verify_sol failed turn to satlike_broken\n");
+        reportf("verify_sol failed turn to satlike_broken\n");
         return;
     }
 
@@ -579,7 +579,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
         else
             model[var(temp)] = !sign(temp);
     }
-    reportf(" c lb= %d   ub=%d \n",tolong(LB_goalvalue),tolong(UB_goalvalue));
+    reportf(" lb= %d   ub=%d \n",tolong(LB_goalvalue),tolong(UB_goalvalue));
     goalvalue_satlike = evalGoal(soft_cls, model, soft_unsat) + fixed_goalval;
     if (goalvalue_satlike < best_goalvalue)
     {
@@ -589,7 +589,7 @@ void MsSolver::satlike_solve(vec<bool> &model){
             model_value += toString(model[i]);
         }
     }
-    reportf(" c get satlike search result, goal value=: %d\n",tolong(goalvalue_satlike));
+    reportf("get satlike search result, goal value=: %d\n",tolong(goalvalue_satlike));
 }
 
 template<class T>
@@ -624,7 +624,7 @@ SCIP_RETCODE init_sol(SCIP *scip, const std::vector<SCIP_VAR *> &vars,std::strin
         SCIP_CALL(SCIPsetSolVal(scip, sol, vars[i], values[i] - '0'));
     SCIP_Bool stored;
     SCIP_CALL(SCIPaddSol(scip, sol, &stored));
-    std::cout << "init solution " << (stored ? "success\n" : "failed\n");
+//    std::cout << "init solution " << (stored ? "success\n" : "failed\n");
     SCIP_CALL(SCIPfreeSol(scip, &sol));
     return SCIP_OKAY;
 }
@@ -956,10 +956,12 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     }
 
     // Try to use satlike to obtain efficient feasible solutions
-    if(satlike_is_use){
+    if(satlike_is_use && weighted_instance){
         vec<bool> model_satlike;
+        uint64_t origin_conflicts = sat_solver.conflicts;
         satlike_solve(model_satlike);
         add_benefit_constraint(psCs,model_satlike);
+        sat_solver.conflicts = origin_conflicts;
     }
     // use scip to solve
     if (pb_n_vars < 100000 && pb_n_constrs < 100000 && soft_cls.size() < 100000)
@@ -980,9 +982,11 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     int dynamic_delay_core_threshoad = 5;
     bool enable_delay_pop_one = !weighted_instance;
     delayed_assump.weighted_instance = weighted_instance;
+    opt_to_bin_search = weighted_instance;
     
     lbool status;
     int cn = 0;
+    auto begin_uwr = cpuTime();
     while (1) {
       cn++;
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
@@ -1366,7 +1370,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (opt_minimization == 2 && opt_verbosity == 1 && use_base_assump) {
             char *t; reportf("Lower bound  = %s\n", t=toString(LB_goalvalue * goal_gcd)); xfree(t); }
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
-                cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
+                (cpuTime() - begin_uwr) >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
             for (int j = 0, i = 0; i < psCs.size(); i++) {
                 const Int &w = soft_cls[psCs[i].snd].fst;

@@ -194,7 +194,7 @@ inline void Satlike::settings()
     cutoff_time = 10;
     if (problem_weighted == 1)
     {
-        std::cout << "c problem weighted = 1" << std::endl;
+        reportf("problem weighted = 1\n");
         max_tries = 100000000;
         max_flips = 10000000;
         max_non_improve_flip = max_flips;
@@ -228,7 +228,7 @@ inline void Satlike::settings()
     }
     else
     {
-        std::cout << "c problem weighted = 0" << std::endl;
+        reportf("problem weighted = 0\n");
         max_tries = 100000000;
         max_flips = 200000000;
         max_non_improve_flip = 10000000;
@@ -424,7 +424,7 @@ inline void Satlike::build_instance()
             total_soft_weight += org_clause_weight[i];
         }
     }
-    std::cout << "c befor creat var literal arrays " << std::endl;
+    reportf( "befor creat var literal arrays \n");
     //creat var literal arrays
     for (v = 1; v <= num_vars; ++v)
     {
@@ -442,18 +442,16 @@ inline void Satlike::build_instance()
         }
     }
 
-    std::cout << "c before build neighbor" << std::endl;
+    reportf( "before build neighbor \n");
 
     for (v = 1; v <= num_vars; ++v)
         var_lit[v][var_lit_count[v]].clause_num = -1;
-
-    std::cout << "c build instime is " << get_runtime() << std::endl;
-
+    reportf( "build instime is %.5f s\n",get_runtime());
     if (get_runtime() > 1.0 || num_clauses > 10000000)
         if_using_neighbor = false;
     else
     {
-        std::cout << "c using neighbor " << std::endl;
+        reportf( "using neighbor \n");
         if_using_neighbor = true;
         build_neighbor_relation();
     }
@@ -530,7 +528,7 @@ inline void Satlike::build_instance(int numVars, int numClauses, unsigned long l
         if (clause_lit_count[i] < min_clause_length)
             min_clause_length = clause_lit_count[i];
     }
-    std::cout << "c befor creat var literal arrays " << std::endl;
+    reportf("befor creat var literal arrays \n");
     //creat var literal arrays
     for (v = 1; v <= num_vars; ++v)
     {
@@ -548,18 +546,18 @@ inline void Satlike::build_instance(int numVars, int numClauses, unsigned long l
         }
     }
 
-    std::cout << "c before build neighbor" << std::endl;
+    reportf(" before build neighbor\n");
 
     for (v = 1; v <= num_vars; ++v)
         var_lit[v][var_lit_count[v]].clause_num = -1;
 
-    std::cout << "c build instime is " << get_runtime() << std::endl;
+    reportf("build instime is %d \n",get_runtime());
 
     if (get_runtime() > 1.0 || num_clauses > 10000000)
         if_using_neighbor = false;
     else
     {
-        std::cout << "c using neighbor " << std::endl;
+        reportf(" using neighbor \n");
         if_using_neighbor = true;
         build_neighbor_relation();
     }
@@ -859,7 +857,7 @@ inline int Satlike::pick_var()
 
 inline void Satlike::local_search(std::vector<int> &init_solution)
 {
-    std::cout << "c changing to SATLike solver! " << std::endl;
+    reportf("changing to SATLike solver! \n");
     settings();
     for (tries = 1; tries < max_tries; ++tries)
     {
@@ -1142,7 +1140,7 @@ inline void Satlike::print_best_solution()
 
 inline bool Satlike::verify_sol()
 {
-    std::cout << "c verify begin " << std::endl;
+    reportf("verify begin \n");
     int c, j, flag;
     long long verify_unsat_weight = 0;
 
@@ -1162,20 +1160,18 @@ inline bool Satlike::verify_sol()
             if (static_cast<unsigned long long>(org_clause_weight[c]) == top_clause_weight) //verify hard clauses
             {
                 //output the clause unsatisfied by the solution
-                std::cout << "c Error: hard clause " << c << " is not satisfied" << std::endl;
-
-                std::cout << "c ";
-                for (j = 0; j < clause_lit_count[c]; ++j)
-                {
-                    if (clause_lit[c][j].sense == 0)
-                        std::cout << "-";
-                    std::cout << clause_lit[c][j].var_num << " ";
-                }
-                std::cout << std::endl;
-                std::cout << "c ";
-                for (j = 0; j < clause_lit_count[c]; ++j)
-                    std::cout << cur_soln[clause_lit[c][j].var_num] << " ";
-                std::cout << std::endl;
+                reportf("Error: hard clause  %d  is not satisfied\n",c);
+//                for (j = 0; j < clause_lit_count[c]; ++j)
+//                {
+//                    if (clause_lit[c][j].sense == 0)
+//                        reportf("-");
+//                    reportf("%d ",clause_lit[c][j].var_num);
+//                }
+//                std::cout << std::endl;
+//                std::cout << "c ";
+//                for (j = 0; j < clause_lit_count[c]; ++j)
+//                    std::cout << cur_soln[clause_lit[c][j].var_num] << " ";
+//                std::cout << std::endl;
                 return 0;
             }
             else
@@ -1187,13 +1183,13 @@ inline bool Satlike::verify_sol()
 
     if (static_cast<unsigned long long>(verify_unsat_weight) == opt_unsat_weight)
     {
-        std::cout << "c yes " << verify_unsat_weight << std::endl;
-        return 1;
+        reportf("yes %d \n",verify_unsat_weight);
+        return true;
     }
     else
     {
-        std::cout << "c Error: find opt=" << opt_unsat_weight << ", but verified opt=" << verify_unsat_weight << std::endl;
-        return 0;
+        reportf("Error: find opt= %d  but verified opt= %d\n",opt_unsat_weight,verify_unsat_weight);
+        return false;
     }
 
 }
@@ -1206,26 +1202,23 @@ inline bool Satlike::verify_goodvarstack(int flipvar)
             continue;
         if (score[i] > 0 && already_in_goodvar_stack[i] == -1)
         {
-            std::cout << "wrong 1 :" << std::endl;
-            std::cout << "var is " << i << std::endl;
+            reportf("wrong 1 : var is  %d\n",i);
         }
         else if (score[i] <= 0 && already_in_goodvar_stack[i] != -1)
         {
-            std::cout << "wrong 2 :" << std::endl;
-            std::cout << "var is " << i << std::endl;
+            reportf("wrong 2 : var is  %d\n",i);
         }
         if (if_score_change[i] != 0)
         {
-            std::cout << "wrong 3 :" << std::endl;
-            std::cout << "var is " << i << std::endl;
+            reportf("wrong 3 : var is  %d\n",i);
         }
     }
     if (score[flipvar] > 0 && already_in_goodvar_stack[flipvar] != -1)
     {
-        std::cout << "wrong flipvar in good var " << flipvar << std::endl;
-        std::cout << score[flipvar] << std::endl;
+        reportf("wrong flipvar in good var %d \n",flipvar);
+        reportf("%lld\n",score[flipvar]);
     }
-    return 1;
+    return true;
 }
 
 inline void Satlike::simple_print()
@@ -1233,12 +1226,12 @@ inline void Satlike::simple_print()
     if (best_soln_feasible == 1)
     {
         if (verify_sol() == 1)
-            std::cout << opt_unsat_weight << '\t' << opt_time << std::endl;
+            reportf("%llu \n %.5f\n",opt_unsat_weight,opt_time);
         else
-            std::cout << "solution is wrong " << std::endl;
+            reportf( "solution is wrong \n");
     }
     else
-        std::cout << -1 << '\t' << -1 << std::endl;
+        reportf("-1  \n -1 \n");
 }
 
 inline void Satlike::unsat(int clause)
