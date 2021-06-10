@@ -661,9 +661,11 @@ void MsSolver::maxsat_solve(solve_Command cmd)
     int dynamic_delay_core_threshoad = 5;
     bool enable_delay_pop_one = !weighted_instance;
     delayed_assump.weighted_instance = weighted_instance;
-    
+    opt_to_bin_search = weighted_instance;
+
     lbool status;
     int cn = 0;
+    auto uwr_begin = cpuTime();
     while (1) {
       cn++;
       if (use_base_assump) for (int i = 0; i < base_assump.size(); i++) assump_ps.push(base_assump[i]);
@@ -1047,7 +1049,7 @@ void MsSolver::maxsat_solve(solve_Command cmd)
         if (opt_minimization == 2 && opt_verbosity == 1 && use_base_assump) {
             char *t; reportf("Lower bound  = %s\n", t=toString(LB_goalvalue * goal_gcd)); xfree(t); }
         if (opt_minimization == 1 && opt_to_bin_search && LB_goalvalue + 5 < UB_goalvalue &&
-                cpuTime() >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
+                (cpuTime() - uwr_begin) >= opt_unsat_cpu && sat_solver.conflicts > opt_unsat_cpu * 100) {
             int cnt = 0;
             for (int j = 0, i = 0; i < psCs.size(); i++) {
                 const Int &w = soft_cls[psCs[i].snd].fst;
