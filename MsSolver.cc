@@ -464,6 +464,18 @@ void print_Lits(const char *s, const Minisat::vec<Lit> &ps, bool print_data = fa
     reportf("},\n");
 }
 
+// https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector
+uint32 get_hash(const Minisat::vec<Lit> &ps)
+{
+    Minisat::vec<Lit> qs;
+    ps.copyTo(qs);
+    std::sort(&qs[0], &qs[qs.size()]);
+    uint32 hash = qs.size();
+    for (int i = 0; i < qs.size(); ++i)
+        hash ^= uint32(qs[i].x) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    return hash;
+}
+
 void MsSolver::maxsat_solve(solve_Command cmd)
 {
     if (!okay()) {
@@ -654,12 +666,13 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             reportf("scip timeout\n");
     }
 
-    bool enable_multi_solve = !weighted_instance;
-    int multi_solve_num_limit = 50;
-    int multi_solve_time_limit = 60; // seconds
-    bool enable_dynamic_delay = !weighted_instance;
-    int dynamic_delay_core_threshoad = 5;
-    bool enable_delay_pop_one = !weighted_instance;
+    const bool enable_multi_solve = !weighted_instance;
+    const int multi_solve_num_limit = 50;
+    const double multi_solve_time_limit_max = 20; // seconds
+    const double multi_solve_time_limit_min = 3; // seconds
+    const bool enable_dynamic_delay = !weighted_instance;
+    const int dynamic_delay_core_threshoad = 5;
+    const bool enable_delay_pop_one = !weighted_instance;
     delayed_assump.weighted_instance = weighted_instance;
     opt_to_bin_search = weighted_instance;
 
@@ -850,9 +863,11 @@ void MsSolver::maxsat_solve(solve_Command cmd)
             int solve_cn = 0;
             auto _2nd_solve_begin = cpuTime();
             srand(0);
+            auto time_limit = std::max(std::min(_1st_solve_time, multi_solve_time_limit_max), multi_solve_time_limit_min);
+            std::vector<uint32> core_hashs = {get_hash(sat_solver.conflict)};
             while(solve_cn < multi_solve_num_limit || (cpuTime() - _2nd_solve_begin) < _1st_solve_time)
             {
-                if((cpuTime() - _2nd_solve_begin) > multi_solve_time_limit)   break;
+                if((cpuTime() - _2nd_solve_begin) > time_limit)   break;
                 if(solve_cn > 10000) break;
                 solve_cn++;
                 if(solve_cn == 1)
@@ -865,6 +880,12 @@ void MsSolver::maxsat_solve(solve_Command cmd)
                 if(bestConfict.size() > sat_solver.conflict.size() )
                     sat_solver.conflict.copyTo(bestConfict);
                 if(bestConfict.size() == 1) break;
+
+                uint32 hash = get_hash(sat_solver.conflict);
+                core_hashs.push_back(hash);
+                int size = core_hashs.size();
+                if (size >= 3 && hash == core_hashs[size - 2] && hash == core_hashs[size - 3])
+                    break;
             }
             if(opt_verbosity) reportf("%d solves done in %.1fs\n", multi_solve_num_limit, cpuTime() - _2nd_solve_begin);
             if(opt_verbosity) reportf("bestUnminimizedConflict.size = %d\n", bestConfict.size());
